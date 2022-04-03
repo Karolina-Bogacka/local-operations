@@ -4,12 +4,23 @@ import flwr as fl
 import gridfs
 import tensorflow as tf
 from pymongo import MongoClient
+from starlette.concurrency import run_in_threadpool
+
 from application.config import DB_PORT, FEDERATED_PORT
+from application.utils import formulate_id
+
+current_jobs = {}
 
 
 async def start_client(id, config):
     client = LOKerasClient(config)
-    fl.client.start_numpy_client(server_address=f"{config.server_address}:{FEDERATED_PORT}", client=client)
+    await run_in_threadpool(
+        lambda: fl.client.start_numpy_client(server_address=f"{config.server_address}:{FEDERATED_PORT}", client=client))
+    current_id = formulate_id(config)
+    if current_id in current_jobs and current_jobs[current_id] > 1:
+        current_jobs[current_id] -= 1
+    else:
+        current_jobs.pop(current_id)
 
 
 # Define local client
@@ -21,7 +32,7 @@ class LOKerasClient(fl.client.NumPyClient):
         db = client.local
         db_grid = client.repository_grid
         fs = gridfs.GridFS(db_grid)
-        if db.models.find_one({"id" : config.model_id, "version": config.model_version}):
+        if db.models.find_one({"id": config.model_id, "version": config.model_version}):
             result = db.models.find_one({"id": config.model_id, "version": config.model_version})
             self.model = pickle.loads(fs.get(result['model_id']).read())
             self.model.__init__(config.shape, classes=config.num_classes, weights=None)
@@ -48,4 +59,9 @@ class LOKerasClient(fl.client.NumPyClient):
         if not isinstance(metrics, list):
             metrics = [metrics]
         evaluations = {m: metrics[i] for i, m in enumerate(self.priv_config.eval_metrics)}
+        #current_id = formulate_id(self.priv_config)
+        #if current_id in current_jobs and current_jobs[current_id] > 1:
+        #    current_jobs[current_id] -= 1
+        #else:
+        #    current_jobs.pop(current_id)
         return loss, len(self.x_test), evaluations
