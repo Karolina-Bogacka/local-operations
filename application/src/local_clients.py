@@ -1,23 +1,21 @@
+import os
 import pickle
 
 import flwr as fl
-import os
-import gc
 import gridfs
+import numpy as np
 import pandas as pd
 import tensorflow as tf
 from pymongo import MongoClient
-import numpy as np
 from sklearn.model_selection import StratifiedKFold
 from starlette.concurrency import run_in_threadpool
-from tensorflow import keras
-from tensorflow.keras.layers import Conv2D, Activation, MaxPooling2D, Dropout, Flatten, Dense
 from tensorflow.keras.layers import BatchNormalization, MaxPool2D, InputLayer
+from tensorflow.keras.layers import Conv2D, Dropout, Flatten, Dense
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-#from tensorflow.keras.applications.vgg16 import VGG16
 
 from application.config import DB_PORT, FEDERATED_PORT, DATABASE_NAME
 from application.utils import formulate_id
+
 
 current_jobs = {}
 ERAS = 50
@@ -120,8 +118,6 @@ def test_model(model, callbacks=None):
                                         target_size=IMAGE_SIZE,
                                         color_mode='rgb',
                                         batch_size=BATCH_SIZE)
-    # print(filenames)
-    # print(test_data_csv[["new_names", "labels"]])
     #test_ds = get_ds(filenames, labels, BATCH_SIZE, PREFETCH_BUFFER_SIZE)
     if callbacks == None:
         loss, accuracy, precision = model.evaluate(test_gen, steps=len(filenames)//BATCH_SIZE)
@@ -130,8 +126,7 @@ def test_model(model, callbacks=None):
     return loss, len(filenames), {'accuracy': accuracy, 'precision': precision}
 
 
-def get_stratified_data_gen(img_paths, labels, data, core_idg, index):
-    print("in data gen")
+def get_stratified_data_gen(img_paths, labels, data, core_idg, index, num_splits=4):
     skf = StratifiedKFold(n_splits=4, random_state=SEED, shuffle=True)
     for train_index, test_index in skf.split(img_paths, labels):
         trainData = img_paths[train_index]
@@ -160,7 +155,7 @@ def get_stratified_data_gen(img_paths, labels, data, core_idg, index):
         yield train_gen, valid_gen, len(trainData), len(testData)
 
 
-def get_stratified_datasets(X, Y):
+def get_stratified_datasets(X, Y, n_splits=4):
     # Create Stratified object
     skf = StratifiedKFold(n_splits=4, random_state=SEED, shuffle=True)
     skf.get_n_splits(X, Y)
@@ -272,11 +267,6 @@ class LOLeukemiaClient(fl.client.NumPyClient):
         self.img_paths, self.labels = np.array(img_paths), np.array(labels)
         d = {'images': self.img_paths, 'labels': labels}
         self.data = pd.DataFrame(data=d)
-        aug_model = tf.keras.Sequential([
-            tf.keras.layers.experimental.preprocessing.RandomFlip("horizontal_and_vertical"),
-            tf.keras.layers.experimental.preprocessing.RandomRotation(0.2),
-            tf.keras.layers.experimental.preprocessing.RandomContrast(0.1)
-        ])
         self.model = get_cnn_model_1(IMAGE_SIZE + (3,))
         adam_opt = tf.keras.optimizers.Adam(learning_rate=0.0001, amsgrad=True)
         metrics = ["accuracy", tf.keras.metrics.Precision(name="precision")]
@@ -289,39 +279,34 @@ class LOLeukemiaClient(fl.client.NumPyClient):
             loss=tf.keras.losses.BinaryCrossentropy(),
             metrics=metrics
         )
+        self.models = {}
+        self.losses = {}
+        self.assigned_cluster = -1
+        self.iteration = 0
+        self.loss_gen=None
 
     def get_parameters(self):
         return self.model.get_weights()
 
     def fit(self, parameters, config):
-        self.model.set_weights(parameters)
+        #self.model.set_weights(parameters)
+        print(f'config:{config["model_index"]}')
+        print(f'Limit:{config["cluster_number"]}')
+        if not self.loss_gen:
+            self.loss_gen = get_stratified_data_gen(self.img_paths, self.labels, self.data, self.core_idg, self.index,
+                                           num_splits=3)
+        if self.iteration == 0:
+            self.losses[config["model_index"]] = self.measure_loss(config["model_index"], self.loss_gen)
+            if len(self.losses) >= config["cluster_number"]:
+                self.assigned_cluster = min(self.losses, key=self.losses.get)
+                print(self.assigned_cluster)
+                print(self.losses)
+        elif "local_epochs" in config and self.iteration < config["local_epochs"]:
+            pass
         data_gen = get_stratified_data_gen(self.img_paths, self.labels, self.data, self.core_idg, self.index)
-        '''
-        data_gen = get_stratified_datasets(self.img_paths, self.labels)
-        while True:
-            try:
-                train_data, valid_data = next(data_gen)
-                train_ds = get_ds(*train_data, BATCH_SIZE, PREFETCH_BUFFER_SIZE)
-                train_ds = train_ds.map(lambda x, y: [augment(x), y], tf.data.experimental.AUTOTUNE)
-                valid_ds = get_ds(*valid_data, BATCH_SIZE, PREFETCH_BUFFER_SIZE)
-                self.model.fit(
-                    train_ds, validation_data=valid_ds, epochs=EPOCHS,
-                    batch_size=BATCH_SIZE)
-                del train_data
-                del valid_data
-                del train_ds
-                del valid_ds
-                gc.collect()
-            except StopIteration:
-                print("stopped")
-                break
-        '''
         while True:
             try:
                 train_gen, valid_gen, steps, val_steps = next(data_gen)
-                print(BATCH_SIZE)
-                print(steps)
-                print(steps//BATCH_SIZE)
                 self.model.fit(
                     train_gen,
                     steps_per_epoch=steps//BATCH_SIZE,
@@ -345,3 +330,6 @@ class LOLeukemiaClient(fl.client.NumPyClient):
             results = {"losses": self.losses, "precision": self.precisions, "accuracy": self.accuracies}
             pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
         return losses, lengths, metrics
+
+    def measure_loss(self, index, data):
+        pass

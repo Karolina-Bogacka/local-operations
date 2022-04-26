@@ -2,13 +2,13 @@ version: '3'
 services:
   local_operations:
     environment:
-      - USER_INDEX=3
+      - USER_INDEX=1
     restart: always
     build: application
     networks:
       - default
     ports:
-      - '9053:9050'
+      - "905${USER_INDEX}:9050"
     #volumes:
     #  - type: bind
     #    source: \\wsl.localhost\Ubuntu20.04LTS\home\new\leaf\data\femnist\data
