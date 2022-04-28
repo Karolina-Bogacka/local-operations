@@ -132,7 +132,7 @@ def get_cnn_model_1(input_shape):
 
 def get_stratified_data_gen(img_paths, labels, data, core_idg, index):
     print("in data gen")
-    skf = StratifiedKFold(n_splits=1, random_state=SEED, shuffle=True)
+    skf = StratifiedKFold(n_splits=5, random_state=SEED, shuffle=True)
     for train_index, test_index in skf.split(img_paths, labels):
         trainData = img_paths[train_index]
         testData = img_paths[test_index]
@@ -283,14 +283,29 @@ class LOLeukemiaClient(fl.client.NumPyClient):
         self.metric_names = ["accuracy", "precision"]
         self.core_idg = ImageDataGenerator(horizontal_flip=True,
                                            vertical_flip=True,
-                                           brightness_range=[0.9, 1.0])
+                                           brightness_range=[0.9, 1.0],
+                                           validation_split=0.2)
         self.model.compile(
             optimizer=adam_opt,
             loss=tf.keras.losses.BinaryCrossentropy(),
             metrics=metrics
         )
-        self.data_gen = get_stratified_data_gen(self.img_paths, self.labels, self.data, self.core_idg, self.index)
-        self.train_gen, self.valid_gen, self.steps, self.val_steps = next(self.data_gen)
+        self.train_gen = self.core_idg.flow_from_directory(os.path.join(os.sep, 'data', 'new_split', f'fold_{self.index}'),
+                                                 class_mode='binary',
+                                                 target_size=IMAGE_SIZE,
+                                                 color_mode='rgb',
+                                                 batch_size=BATCH_SIZE,
+                                                 shuffle=True,
+                                                 subset='training'
+                                                      )
+        self.valid_gen = self.core_idg.flow_from_directory(os.path.join(os.sep, 'data', 'new_split', f'fold_{self.index}'),
+                                                 class_mode='binary',
+                                                 target_size=IMAGE_SIZE,
+                                                 color_mode='rgb',
+                                                 batch_size=BATCH_SIZE,
+                                                 shuffle=False,
+                                                 subset='validation')
+        self.steps, self.val_steps = self.train_gen.samples, self.valid_gen.samples
 
     def get_parameters(self):
         return self.model.get_weights()
