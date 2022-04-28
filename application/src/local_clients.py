@@ -351,7 +351,7 @@ class LOLeukemiaClient(fl.client.NumPyClient):
         self.losses.append(losses)
         self.precisions.append(metrics["precision"])
         self.accuracies.append(metrics["accuracy"])
-        with open(os.path.join("..", "results.txt"), 'wb') as handle:
+        with open(os.path.join(os.sep, "code", "application", "results.pkl"), 'wb') as handle:
             results = {"losses": self.losses, "precision": self.precisions, "accuracy": self.accuracies}
             pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
         return losses, lengths, metrics
