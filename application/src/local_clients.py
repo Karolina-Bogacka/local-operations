@@ -95,7 +95,7 @@ def get_cnn_model_1(input_shape):
     return model
 
 
-def test_model(model, callbacks=None):
+'''def test_model(model, callbacks=None):
     # ../input/leukemia-classification/C-NMC_Leukemia/validation_data/C-NMC_test_prelim_phase_data_labels.csv
     test_dir = os.path.join(os.sep, 'data', 'C-NMC_Leukemia', "validation_data")
     test_data_csv = pd.read_csv(
@@ -127,12 +127,12 @@ def test_model(model, callbacks=None):
         loss, accuracy, precision = model.evaluate(test_gen, steps=len(filenames)//BATCH_SIZE)
     else:
         loss, accuracy, precision = model.evaluate(test_gen, steps=len(filenames)//BATCH_SIZE, callbacks=callbacks)
-    return loss, len(filenames), {'accuracy': accuracy, 'precision': precision}
+    return loss, len(filenames), {'accuracy': accuracy, 'precision': precision}'''
 
 
 def get_stratified_data_gen(img_paths, labels, data, core_idg, index):
     print("in data gen")
-    skf = StratifiedKFold(n_splits=4, random_state=SEED, shuffle=True)
+    skf = StratifiedKFold(n_splits=1, random_state=SEED, shuffle=True)
     for train_index, test_index in skf.split(img_paths, labels):
         trainData = img_paths[train_index]
         testData = img_paths[test_index]
@@ -156,8 +156,8 @@ def get_stratified_data_gen(img_paths, labels, data, core_idg, index):
                                                  target_size=IMAGE_SIZE,
                                                  color_mode='rgb',
                                                  batch_size=BATCH_SIZE)
-        print("in gen")
         yield train_gen, valid_gen, len(trainData), len(testData)
+    return
 
 
 def get_stratified_datasets(X, Y):
@@ -289,13 +289,14 @@ class LOLeukemiaClient(fl.client.NumPyClient):
             loss=tf.keras.losses.BinaryCrossentropy(),
             metrics=metrics
         )
+        self.data_gen = get_stratified_data_gen(self.img_paths, self.labels, self.data, self.core_idg, self.index)
+        self.train_gen, self.valid_gen, self.steps, self.val_steps = next(self.data_gen)
 
     def get_parameters(self):
         return self.model.get_weights()
 
     def fit(self, parameters, config):
         self.model.set_weights(parameters)
-        data_gen = get_stratified_data_gen(self.img_paths, self.labels, self.data, self.core_idg, self.index)
         '''
         data_gen = get_stratified_datasets(self.img_paths, self.labels)
         while True:
@@ -316,28 +317,22 @@ class LOLeukemiaClient(fl.client.NumPyClient):
                 print("stopped")
                 break
         '''
-        while True:
-            try:
-                train_gen, valid_gen, steps, val_steps = next(data_gen)
-                print(BATCH_SIZE)
-                print(steps)
-                print(steps//BATCH_SIZE)
-                self.model.fit(
-                    train_gen,
-                    steps_per_epoch=steps//BATCH_SIZE,
-                    epochs=EPOCHS,
-                    validation_data=valid_gen,
-                    validation_steps=val_steps//BATCH_SIZE,
-                )
-                print("Model test")
-            except StopIteration:
-                print("stopped")
-                break
+        self.model.fit(
+            self.train_gen,
+            steps_per_epoch=self.steps//BATCH_SIZE,
+            epochs=EPOCHS,
+            validation_data=self.valid_gen,
+            validation_steps=self.val_steps//BATCH_SIZE,
+        )
+        self.valid_gen.reset()
+        self.train_gen.reset()
         return self.model.get_weights(), len(self.img_paths), {}
 
     def evaluate(self, parameters, config):
         self.model.set_weights(parameters)
-        losses, lengths, metrics = test_model(self.model)
+        loss, accuracy, precision = model.evaluate(self.valid_gen, steps=self.val_steps // BATCH_SIZE)
+        losses, lengths, metrics = loss, len(self.val_steps), {'accuracy': accuracy, 'precision': precision}
+        self.valid_gen.reset()
         self.losses.append(losses)
         self.precisions.append(metrics["precision"])
         self.accuracies.append(metrics["accuracy"])
