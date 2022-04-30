@@ -39,6 +39,7 @@ class LOTrainingConfiguration(BaseModel):
     shape: List[int]
     model_id: int
     model_version: int
+    num_clusters: int
     config: List[BasicConfiguration]
 
     class Config:

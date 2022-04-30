@@ -11,20 +11,35 @@ import src.local_clients
 from application.config import DATABASE_NAME
 from application.utils import formulate_id
 from pydloc.models import LOTrainingConfiguration, MLModel
+from multiprocessing import Process, Array, Value, Queue
 
 app = FastAPI()
 
 
 # Receive configuration for training job
 @app.post("/job/config/{id}")
-def receive_updated(id, data: LOTrainingConfiguration, background_tasks: BackgroundTasks):
+def receive_updated(id, data: LOTrainingConfiguration, background_tasks:BackgroundTasks):
     try:
+        losses = Array("f", data.num_clusters)
+        queue = Queue()
+        queue_loss = Queue()
+        queue_cluster = Queue()
+        priority = Value("i", 0)
+        processes = []
         placed_id = formulate_id(config=data)
         if placed_id not in src.local_clients.current_jobs:
             src.local_clients.current_jobs[placed_id] = 1
         else:
             src.local_clients.current_jobs[placed_id] += 1
-        background_tasks.add_task(src.local_clients.start_client, id=id, config=data)
+        for i in range(data.num_clusters):
+            client_process = Process(target=src.local_clients.start_client, args=(id,
+                                                                                  i,
+                                                                                  data,
+                                                                                  losses,priority,queue,queue_loss,queue_cluster,))
+            client_process.start()
+            processes.append(client_process)
+        for p in processes:
+            p.join()
     except Exception as e:
         print("An exception occurred ::", e)
         return 500

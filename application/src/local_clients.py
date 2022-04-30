@@ -2,11 +2,28 @@ import os
 import pickle
 
 import flwr as fl
-import gridfs
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from pymongo import MongoClient
+from logging import WARNING, INFO
+from flwr.common.logger import log
+from flwr.common import (
+    Code,
+    Config,
+    EvaluateIns,
+    EvaluateRes,
+    FitIns,
+    FitRes,
+    Metrics,
+    ParametersRes,
+    PropertiesIns,
+    PropertiesRes,
+    Scalar,
+    Status,
+    parameters_to_weights,
+    weights_to_parameters,
+)
+
 from sklearn.model_selection import StratifiedKFold
 from starlette.concurrency import run_in_threadpool
 from tensorflow.keras.layers import BatchNormalization, MaxPool2D, InputLayer
@@ -14,11 +31,13 @@ from tensorflow.keras.layers import Conv2D, Dropout, Flatten, Dense
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 from application.config import DB_PORT, FEDERATED_PORT, DATABASE_NAME
+from application.my_client import MyClient
+from application.my_client_start import start_my_client
 from application.utils import formulate_id
 
 
 current_jobs = {}
-ERAS = 50
+ERAS = 1
 EPOCHS = 1
 SEED = 42
 BATCH_SIZE = 16
@@ -110,19 +129,19 @@ def test_model(model, callbacks=None):
     labels = [str(1 - get_label_by_name(name)) for name in dir_list[2]]
     idg = ImageDataGenerator()
     df = pd.DataFrame({'images': filenames, 'labels': labels})
-    test_gen = idg.flow_from_dataframe(dataframe=df,
+    test_gen = idg.flow_from_dataframe(dataframe=df.head(200),
                                         directory=test_dir,
                                         x_col='images',
                                         y_col='labels',
                                         class_mode='binary',
                                         target_size=IMAGE_SIZE,
                                         color_mode='rgb',
-                                        batch_size=BATCH_SIZE)
+                                        batch_size=1)
     #test_ds = get_ds(filenames, labels, BATCH_SIZE, PREFETCH_BUFFER_SIZE)
     if callbacks == None:
-        loss, accuracy, precision = model.evaluate(test_gen, steps=len(filenames)//BATCH_SIZE)
+        loss, accuracy, precision = model.evaluate(test_gen, steps=len(filenames))
     else:
-        loss, accuracy, precision = model.evaluate(test_gen, steps=len(filenames)//BATCH_SIZE, callbacks=callbacks)
+        loss, accuracy, precision = model.evaluate(test_gen, steps=len(filenames), callbacks=callbacks)
     return loss, len(filenames), {'accuracy': accuracy, 'precision': precision}
 
 
@@ -151,7 +170,6 @@ def get_stratified_data_gen(img_paths, labels, data, core_idg, index, num_splits
                                                  target_size=IMAGE_SIZE,
                                                  color_mode='rgb',
                                                  batch_size=BATCH_SIZE)
-        print("in gen")
         yield train_gen, valid_gen, len(trainData), len(testData)
 
 
@@ -167,14 +185,6 @@ def get_stratified_datasets(X, Y, n_splits=4):
         yield [[X_train, y_train], [X_test, y_test]]
 
 
-def get_ds(filenames, labels, batch_size, pref_buf_size):
-    AUTOTUNE = tf.data.experimental.AUTOTUNE
-    label_ds, image_pathes = tf.data.Dataset.from_tensor_slices(labels), tf.data.Dataset.from_tensor_slices(filenames)
-    images_ds = image_pathes.map(load_image, AUTOTUNE).map(preprocess, AUTOTUNE)
-    ds = tf.data.Dataset.zip((images_ds, label_ds)).batch(batch_size).prefetch(pref_buf_size)
-    return ds
-
-
 def load_image(path):
     image = tf.io.decode_bmp(tf.io.read_file(path), channels=3)
     return image
@@ -186,18 +196,12 @@ def preprocess(image):
     return result
 
 
-def augment(image):
-    max_gamma_delta = 0.1
-    image = tf.image.random_brightness(image, max_delta=max_gamma_delta, seed=SEED)
-    image = tf.image.random_flip_up_down(image, seed=SEED)
-    image = tf.image.random_flip_left_right(image, seed=SEED)
-    return image
-
-
-async def start_client(id, config):
-    client = LOLeukemiaClient()
-    await run_in_threadpool(
-        lambda: fl.client.start_numpy_client(server_address=f"{config.server_address}:{FEDERATED_PORT}", client=client))
+def start_client(id, cluster_index, config, losses, priority, queue, queue_loss,
+                 queue_cluster):
+    client = LOLeukemiaClient(cluster_index, losses, priority, config, queue,
+                              queue_loss, queue_cluster)
+    start_my_client(server_address=f"{config.server_address}"
+                                                 f":{FEDERATED_PORT}", client=client)
     current_id = formulate_id(config)
     if current_id in current_jobs and current_jobs[current_id] > 1:
         current_jobs[current_id] -= 1
@@ -205,50 +209,18 @@ async def start_client(id, config):
         current_jobs.pop(current_id)
 
 
-# Define local client
-class LOKerasClient(fl.client.NumPyClient):
+class LOLeukemiaClient(MyClient):
 
-    def __init__(self, config):
+    def __init__(self, cluster_index, losses, priority, config, queue, queue_loss,
+                 queue_cluster):
+        self.queue = queue
+        self.queue_loss = queue_loss
+        self.queue_cluster = queue_cluster
         self.priv_config = config
-        client = MongoClient(DATABASE_NAME, DB_PORT)
-        db = client.local
-        db_grid = client.repository_grid
-        fs = gridfs.GridFS(db_grid)
-        if db.models.find_one({"id": config.model_id, "version": config.model_version}):
-            result = db.models.find_one({"id": config.model_id, "version": config.model_version})
-            self.model = pickle.loads(fs.get(result['model_id']).read())
-            self.model.__init__(config.shape, classes=config.num_classes, weights=None)
-        else:
-            self.model = tf.keras.applications.MobileNetV2(config.shape, classes=config.num_classes, weights=None)
-        self.model.compile(config.optimizer, config.eval_func, metrics=config.eval_metrics)
-        (self.x_train, self.y_train), (self.x_test, self.y_test) = tf.keras.datasets.cifar10.load_data()
-
-    def get_parameters(self):
-        return self.model.get_weights()
-
-    def fit(self, parameters, config):
-        self.model.set_weights(parameters)
-        epochs = config["config"][0].epochs if config else self.priv_config.config[0].epochs
-        batch_size = int(config["config"][0]["batch_size"]) if config else self.priv_config.config[0].batch_size
-        steps_per_epoch = config["config"][0].steps_per_epoch if config else self.priv_config.config[0].steps_per_epoch
-        self.model.fit(self.x_train, self.y_train, epochs=epochs, batch_size=batch_size,
-                       steps_per_epoch=steps_per_epoch)
-        return self.model.get_weights(), len(self.x_train), {}
-
-    def evaluate(self, parameters, config):
-        self.model.set_weights(parameters)
-        loss, metrics = self.model.evaluate(self.x_test, self.y_test)
-        if not isinstance(metrics, list):
-            metrics = [metrics]
-        evaluations = {m: metrics[i] for i, m in enumerate(self.priv_config.eval_metrics)}
-        return loss, len(self.x_test), evaluations
-
-
-class LOLeukemiaClient(fl.client.NumPyClient):
-
-    def __init__(self):
+        self.priority = priority
+        self.cluster_index = cluster_index
         self.index = os.getenv('USER_INDEX')
-        self.losses = []
+        self.losses_visual = []
         self.accuracies = []
         self.precisions = []
         all_training = os.walk(os.path.join(os.sep, 'data', 'new_split', f'fold_{self.index}'))
@@ -279,57 +251,128 @@ class LOLeukemiaClient(fl.client.NumPyClient):
             loss=tf.keras.losses.BinaryCrossentropy(),
             metrics=metrics
         )
-        self.models = {}
-        self.losses = {}
+        self.local_gen = self.core_idg.flow_from_dataframe(dataframe=self.data,
+                                                           directory=os.path.join(os.sep,
+                                                                                  'data',
+                                                                                  'new_split',
+                                                                                  f'fold_{self.index}'),
+                                                           x_col='images',
+                                                           y_col='labels',
+                                                           class_mode='binary',
+                                                           target_size=IMAGE_SIZE,
+                                                           color_mode='rgb',
+                                                           batch_size=BATCH_SIZE)
+        self.losses = losses
         self.assigned_cluster = -1
-        self.iteration = 0
-        self.loss_gen=None
+        self.model_weights = {}
+        self.current_epoch = 0
+        self.current_step = 0
+        self.step_diff = 12
+        self.possible_steps = len(self.data)//(BATCH_SIZE*self.step_diff)
+
+    def get_properties(self, ins: PropertiesIns) -> PropertiesRes:
+        """Return the current client properties."""
+        return PropertiesRes(
+            status=Status(code=Code.OK, message="Success"),
+            properties={"cluster_index": self.cluster_index},
+        )
 
     def get_parameters(self):
         return self.model.get_weights()
 
     def fit(self, parameters, config):
-        #self.model.set_weights(parameters)
-        print(f'config:{config["model_index"]}')
-        print(f'Limit:{config["cluster_number"]}')
-        if not self.loss_gen:
-            self.loss_gen = get_stratified_data_gen(self.img_paths, self.labels, self.data, self.core_idg, self.index,
-                                           num_splits=3)
-        if self.iteration == 0:
-            self.losses[config["model_index"]] = self.measure_loss(config["model_index"], self.loss_gen)
-            if len(self.losses) >= config["cluster_number"]:
-                self.assigned_cluster = min(self.losses, key=self.losses.get)
-                print(self.assigned_cluster)
-                print(self.losses)
-        elif "local_epochs" in config and self.iteration < config["local_epochs"]:
-            pass
-        data_gen = get_stratified_data_gen(self.img_paths, self.labels, self.data, self.core_idg, self.index)
-        while True:
-            try:
-                train_gen, valid_gen, steps, val_steps = next(data_gen)
-                self.model.fit(
-                    train_gen,
-                    steps_per_epoch=steps//BATCH_SIZE,
-                    epochs=EPOCHS,
-                    validation_data=valid_gen,
-                    validation_steps=val_steps//BATCH_SIZE,
-                )
-                print("Model test")
-            except StopIteration:
-                print("stopped")
-                break
-        return self.model.get_weights(), len(self.img_paths), {}
+        log(INFO, f"Parameter length is {len(parameters)}")
+        self.model.set_weights(parameters)
+        log(INFO,
+            f"At the beginning of fit losses of client{os.environ['USER_INDEX']} "
+            f"look like this {np.array(self.losses)}")
+        log(INFO, f'Received config of model:{config["model_index"]}')
+        log(INFO, f'Current priority of :{self.priority.value}')
+
+        if self.current_step >= self.possible_steps:
+            self.current_step = 0
+            self.local_gen.reset()
+
+        if self.current_epoch <= config["local_epochs"]:
+            log(INFO, f'This local client is of index:{self.cluster_index}')
+            self.model_weights[config['model_index']] = parameters
+            log(INFO, f'Iteration of index {self.current_epoch}')
+            history = self.model.fit(
+                self.local_gen,
+                batch_size=BATCH_SIZE,
+                steps_per_epoch=self.step_diff,
+                epochs=1
+            )
+            log(INFO, f"Loss of model {config['model_index']} equal to {history.history['loss']}")
+            self.losses[config["model_index"]] = history.history['loss'][0]
+            log(INFO,
+                f"Client of index {config['model_index']} equal to"
+                f" {history.history['loss']}")
+
+            if self.priority.value == self.priv_config.num_clusters-1:
+                log(INFO,
+                    f"Client of index {config['model_index']} currently has all the "
+                    f"current info")
+
+                lowest_loss = history.history['loss'][0]
+                lowest_cluster = config["model_index"]
+                lowest_weights = self.model.get_weights()
+                lowest_steps = self.step_diff*BATCH_SIZE
+                while not self.queue.empty():
+                    weights, loss, index, steps = self.queue.get()
+                    self.priority.value -= 1
+                    if loss < lowest_loss:
+                        lowest_cluster = index
+                        lowest_weights = weights
+                        lowest_loss = loss
+                        lowest_steps = steps
+                #self.model.set_weights(self.model_weights[index_of_lowest])
+                log(INFO,
+                    f"At the end of fit losses of {os.environ['USER_INDEX']} "
+                    f"look like this {np.array(self.losses)}")
+                self.current_epoch += 1
+                self.current_step += self.step_diff
+                self.queue_cluster.put((lowest_weights, lowest_cluster))
+                return lowest_weights, lowest_steps, {
+                    "loss": lowest_loss, "assigned_cluster": lowest_cluster,
+                    "clustering_phase":
+                        self.current_epoch < config["local_epochs"], "failure": False}
+            else:
+                self.current_epoch += 1
+                self.current_step += self.step_diff
+                self.priority.value += 1
+                self.queue.put((self.model.get_weights(), history.history['loss'][0],
+                                config["model_index"], self.step_diff*BATCH_SIZE))
+                return self.model.get_weights(), -1, \
+                       {"failure": True}
+        else:
+            log(INFO, f"This client's iterative phase assigned it to "
+                      f":{config['model_index']}")
+            log(INFO, f'Iteration of index {self.current_epoch}')
+            history = self.model.fit(
+                self.local_gen,
+                batch_size=BATCH_SIZE,
+                steps_per_epoch=self.step_diff,
+                epochs=1
+            )
+            self.current_epoch += 1
+            self.current_step += self.step_diff
+
+            return self.model.get_weights(), self.step_diff*BATCH_SIZE, {"loss": history.history[
+                'loss'][0], "assigned_cluster": self.assigned_cluster, "clustering_phase":
+                self.current_epoch < config["local_epochs"], "failure": False}
 
     def evaluate(self, parameters, config):
-        self.model.set_weights(parameters)
-        losses, lengths, metrics = test_model(self.model)
-        self.losses.append(losses)
-        self.precisions.append(metrics["precision"])
-        self.accuracies.append(metrics["accuracy"])
-        with open(os.path.join("..", "results.txt"), 'wb') as handle:
-            results = {"losses": self.losses, "precision": self.precisions, "accuracy": self.accuracies}
-            pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        losses, lengths, metrics = 0.0, 10, {m: 0.0 for m in self.metric_names}
+        log(INFO, f"Metrics {metrics}")
+        if not self.queue_cluster.empty():
+            results = self.queue_cluster.get()
+            weights, cluster_index = results
+            self.model.set_weights(weights)
+            losses, lengths, metrics = test_model(self.model)
+            self.losses_visual.append(losses)
+            self.precisions.append(metrics["precision"])
+            self.accuracies.append(metrics["accuracy"])
+            log(INFO, f"Client {self.index} is in cluster {cluster_index} with "
+                         f"accuracy {metrics['accuracy']}")
         return losses, lengths, metrics
-
-    def measure_loss(self, index, data):
-        pass

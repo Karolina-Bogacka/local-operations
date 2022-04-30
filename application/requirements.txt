@@ -1,6 +1,6 @@
 tensorflow~=2.6.0
 dill~=0.3.4
-flwr~=0.17.0
+flwr~=0.18.0
 pandas~=1.4.2
 pymongo~=4.0.1
 scikit-learn~=1.0.2

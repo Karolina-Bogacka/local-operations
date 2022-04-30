@@ -15,7 +15,7 @@ services:
     #    target: /data
     volumes:
       - type: bind
-        source: /mnt/c/Users/kboga/PycharmProjects/localOperationsBeta/data
+        source: /Users/karolinabogacka/PycharmProjects/fl-local-operations/data
         target: /data
 
 networks:
