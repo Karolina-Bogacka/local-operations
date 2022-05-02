@@ -18,3 +18,6 @@ Sample request body for post /job/config/{id}:
    "steps_per_epoch": "32",
    "epochs": "5",
    "learning_rate": "0.001"}]}
+
+# 1. add env file like in base
+# 2. 

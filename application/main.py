@@ -1,13 +1,18 @@
 from http import HTTPStatus
+from logging import INFO
 
 import gridfs
 import uvicorn
+from flwr.common.logger import log
+
+from application.src.local_clients import start_client
+from application.src.special_client_implementation import start_middle_client
 from config import PORT, HOST, DB_PORT
 from fastapi import BackgroundTasks
 from fastapi import FastAPI, status, UploadFile, File, Response, HTTPException
 from pymongo import MongoClient
 
-import src.local_clients
+
 from application.config import DATABASE_NAME
 from application.utils import formulate_id
 from pydloc.models import LOTrainingConfiguration, MLModel
@@ -19,12 +24,19 @@ app = FastAPI()
 @app.post("/job/config/{id}")
 def receive_updated(id, data: LOTrainingConfiguration, background_tasks: BackgroundTasks):
     try:
-        placed_id = formulate_id(config=data)
-        if placed_id not in src.local_clients.current_jobs:
-            src.local_clients.current_jobs[placed_id] = 1
-        else:
-            src.local_clients.current_jobs[placed_id] += 1
-        background_tasks.add_task(src.local_clients.start_client, id=id, config=data)
+        log(INFO, "Config received")
+        start_client(id, data)
+    except Exception as e:
+        print("An exception occurred ::", e)
+        return 500
+    return 200
+
+# Receive configuration for training job
+@app.post("/job/middle/config/{id}")
+def receive_middle_updated(id, data: LOTrainingConfiguration, background_tasks:
+BackgroundTasks):
+    try:
+        start_middle_client(data)
     except Exception as e:
         print("An exception occurred ::", e)
         return 500
@@ -69,4 +81,4 @@ def retrieve_status():
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host=HOST, port=PORT)
+    uvicorn.run("main:app", host=HOST, port=PORT)

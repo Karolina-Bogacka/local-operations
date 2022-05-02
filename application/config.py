@@ -5,3 +5,4 @@ FEDERATED_PORT = 8080
 SERVER_ADDRESS = "localhost"
 DATABASE_NAME = "db"
 DATA_FOLDER = '/data'
+
