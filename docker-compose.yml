@@ -2,7 +2,7 @@ version: '3'
 services:
   local_operations:
     environment:
-      - USER_INDEX=5
+      - USER_INDEX=1
     restart: always
     build: application
     networks:
@@ -15,7 +15,7 @@ services:
     #    target: /data
     volumes:
       - type: bind
-        source: /home/wasielk/federated-experiments/fl-local-operations/data
+        source: /Users/karolinabogacka/PycharmProjects/fl-local-operations/data
         target: /data
 
 networks:
