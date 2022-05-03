@@ -8,6 +8,10 @@ import gridfs
 import pandas as pd
 import tensorflow as tf
 from flwr.common.logger import log
+from keras import Sequential
+from keras.constraints import maxnorm
+from keras.utils import np_utils
+from tensorflow.keras.optimizers import SGD
 from pymongo import MongoClient
 import numpy as np
 from sklearn.model_selection import StratifiedKFold
@@ -228,16 +232,42 @@ class LOCifarClient(fl.client.NumPyClient):
         self.losses = []
         self.accuracies = []
         self.precisions = []
-        self.model = tf.keras.applications.EfficientNetB0(
-            input_shape=(32, 32, 3), weights=None, classes=10
-        )
-        adam_opt = tf.keras.optimizers.SGD(learning_rate=0.0001)
-        self.model.compile(adam_opt, "sparse_categorical_crossentropy", metrics=[
-            "accuracy"])
-
         # Load a subset of CIFAR-10 to simulate the local data partition
         (self.x_train, self.y_train), (self.x_test, self.y_test) = load_partition(
             int(self.index))
+        self.x_train = self.x_train.astype('float32')
+        self.x_test = self.x_test.astype('float32')
+        self.x_train = self.x_train / 255.0
+        self.x_test = self.x_test / 255.0
+        self.y_train = np_utils.to_categorical(self.y_train)
+        self.y_test = np_utils.to_categorical(self.y_test)
+        self.num_classes = self.y_test.shape[1]
+        self.model = Sequential()
+        self.model.add(Conv2D(32, (3, 3), input_shape=(32, 32, 3), activation='relu',
+                         padding='same'))
+        self.model.add(Dropout(0.2))
+        self.model.add(Conv2D(32, (3, 3), activation='relu', padding='same'))
+        self.model.add(MaxPooling2D(pool_size=(2, 2)))
+        self.model.add(Conv2D(64, (3, 3), activation='relu', padding='same'))
+        self.model.add(Dropout(0.2))
+        self.model.add(Conv2D(64, (3, 3), activation='relu', padding='same'))
+        self.model.add(MaxPooling2D(pool_size=(2, 2)))
+        self.model.add(Conv2D(128, (3, 3), activation='relu', padding='same'))
+        self.model.add(Dropout(0.2))
+        self.model.add(Conv2D(128, (3, 3), activation='relu', padding='same'))
+        self.model.add(MaxPooling2D(pool_size=(2, 2)))
+        self.model.add(Flatten())
+        self.model.add(Dropout(0.2))
+        self.model.add(Dense(1024, activation='relu', kernel_constraint=maxnorm(3)))
+        self.model.add(Dropout(0.2))
+        self.model.add(Dense(512, activation='relu', kernel_constraint=maxnorm(3)))
+        self.model.add(Dropout(0.2))
+        self.model.add(Dense(self.num_classes, activation='softmax'))
+        lrate = 0.01
+        decay = lrate / 50
+        sgd = SGD(lr=lrate, momentum=0.9, decay=decay, nesterov=False)
+        self.model.compile(loss='categorical_crossentropy', optimizer=sgd,
+                      metrics=['accuracy'])
 
         metrics = ["accuracy", tf.keras.metrics.Precision(name="precision")]
         self.metric_names = ["accuracy", "precision"]
@@ -251,8 +281,8 @@ class LOCifarClient(fl.client.NumPyClient):
         history = self.model.fit(
             self.x_train,
             self.y_train,
-            16,
-            1,
+            32,
+            epochs=1,
             validation_split=0.1,
         )
         results = {
@@ -267,7 +297,7 @@ class LOCifarClient(fl.client.NumPyClient):
         self.model.set_weights(parameters)
 
         # Evaluate global model parameters on the local test data and return results
-        loss, accuracy = self.model.evaluate(self.x_test, self.y_test, 32)
+        loss, accuracy = self.model.evaluate(self.x_test, self.y_test, 16)
         num_examples_test = len(self.x_test)
         self.losses.append(loss)
         self.accuracies.append(accuracy)
