@@ -10,6 +10,8 @@ RUN pip3 install pillow
 COPY . /code/application
 ENV PYTHONPATH "${PYTHONPATH}:/code/application"
 
+RUN rm -rf ~/.keras/datasets/*
+
 CMD python3 ./application/main.py
 
 EXPOSE 9050

@@ -1,4 +1,4 @@
-tensorflow~=2.6.0
+tensorflow~=2.6.2
 dill~=0.3.4
 flwr~=0.18.0
 pandas~=1.4.2
@@ -10,3 +10,4 @@ uvicorn~=0.15.0
 config~=0.5.1
 fastapi~=0.70.0
 keras~=2.6.0
+

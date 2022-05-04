@@ -15,8 +15,8 @@ services:
     #    target: /data
     volumes:
       - type: bind
-        source: /Users/karolinabogacka/PycharmProjects/fl-local-operations/data
-        target: /data
+        source: /Users/karolinabogacka/PycharmProjects/fl-local-operations/cifar-10-batches-py
+        target: /cifar-10-batches-py
 
 networks:
   default:

@@ -1,7 +1,10 @@
 from http import HTTPStatus
+from logging import INFO
 
 import gridfs
 import uvicorn
+from flwr.common.logger import log
+
 from config import PORT, HOST, DB_PORT
 from fastapi import BackgroundTasks
 from fastapi import FastAPI, status, UploadFile, File, Response, HTTPException
@@ -20,7 +23,9 @@ app = FastAPI()
 @app.post("/job/config/{id}")
 def receive_updated(id, data: LOTrainingConfiguration, background_tasks:BackgroundTasks):
     try:
-        losses = Array("f", data.num_clusters)
+        losses = Array("f", [0]*50)
+        accuracies = Array("f", [0]*50)
+        times = Array("f", [0]*50)
         queue = Queue()
         queue_loss = Queue()
         queue_cluster = Queue()
@@ -35,8 +40,10 @@ def receive_updated(id, data: LOTrainingConfiguration, background_tasks:Backgrou
             client_process = Process(target=src.local_clients.start_client, args=(id,
                                                                                   i,
                                                                                   data,
-                                                                                  losses,priority,queue,queue_loss,queue_cluster,))
+                                                                                  losses,priority,queue,queue_loss,queue_cluster,
+                                                                                  accuracies, times))
             client_process.start()
+            log(INFO, f"processes on client {i}")
             processes.append(client_process)
         for p in processes:
             p.join()
