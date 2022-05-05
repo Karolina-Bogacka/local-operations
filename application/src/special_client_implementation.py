@@ -163,4 +163,11 @@ class SpecialClientImplementation(fl.client.NumPyClient):
         self.model.set_weights(parameters)
         loss_aggregated, metrics_aggregated, length, (results, failures) = \
             self.server.evaluate(self.round-1)
+        with open(os.path.join(os.sep, "code", "application", "results.pkl"),
+                  'wb') as handle:
+            self.losses.append(loss_aggregated)
+            self.times.append(time.time())
+            results_to_file = {"loss": self.losses,
+                       "times": self.times}
+            pickle.dump(results_to_file, handle, protocol=pickle.HIGHEST_PROTOCOL)
         return loss_aggregated, length, metrics_aggregated
