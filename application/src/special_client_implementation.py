@@ -13,11 +13,25 @@ from flwr.server import SimpleClientManager
 from flwr.server.grpc_server.grpc_server import start_grpc_server
 from flwr.server.strategy import Strategy
 from keras_preprocessing.image import ImageDataGenerator
-
+from flwr.client import start_numpy_client
+from flwr.common.logger import log
+from keras import backend, Sequential
+from keras.constraints import maxnorm
+from keras.datasets.cifar import load_batch
+from keras.layers import MaxPooling2D
+from tensorflow.keras.optimizers import SGD
+from keras.utils import np_utils
+from sklearn.model_selection import StratifiedKFold
+from starlette.concurrency import run_in_threadpool
+from tensorflow.keras.layers import BatchNormalization, MaxPool2D, InputLayer
+from tensorflow.keras.layers import Conv2D, Dropout, Flatten, Dense
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from application.config import FEDERATED_PORT
-from application.src.local_clients import get_cnn_model_1, IMAGE_SIZE
+from application.src.local_clients import  IMAGE_SIZE, BATCH_SIZE
 from application.src.special_server import SpecialServer
 from application.src.special_strategy import SpecialFedAvg
+
+EPOCHS=50
 
 
 def start_middle_client(config):
@@ -46,39 +60,35 @@ class SpecialClientImplementation(fl.client.NumPyClient):
         self.grpc_server = None
         self.round = 0
         self.accuracies = []
-        self.precisions = []
+        self.times = []
+        self.model = Sequential()
+        self.model.add(Conv2D(32, (3, 3), input_shape=(32, 32, 3), activation='relu',
+                              padding='same'))
+        self.model.add(Dropout(0.2))
+        self.model.add(Conv2D(32, (3, 3), activation='relu', padding='same'))
+        self.model.add(MaxPooling2D(pool_size=(2, 2)))
+        self.model.add(Conv2D(64, (3, 3), activation='relu', padding='same'))
+        self.model.add(Dropout(0.2))
+        self.model.add(Conv2D(64, (3, 3), activation='relu', padding='same'))
+        self.model.add(MaxPooling2D(pool_size=(2, 2)))
+        self.model.add(Conv2D(128, (3, 3), activation='relu', padding='same'))
+        self.model.add(Dropout(0.2))
+        self.model.add(Conv2D(128, (3, 3), activation='relu', padding='same'))
+        self.model.add(MaxPooling2D(pool_size=(2, 2)))
+        self.model.add(Flatten())
+        self.model.add(Dropout(0.2))
+        self.model.add(Dense(1024, activation='relu', kernel_constraint=maxnorm(3)))
+        self.model.add(Dropout(0.2))
+        self.model.add(Dense(512, activation='relu', kernel_constraint=maxnorm(3)))
+        self.model.add(Dropout(0.2))
+        self.model.add(Dense(10, activation='softmax'))
+        lrate = 0.01
+        decay = lrate / 50
+        sgd = SGD(lr=lrate, momentum=0.9, decay=decay, nesterov=False)
+        self.model.compile(loss='categorical_crossentropy', optimizer=sgd,
+                           metrics=['accuracy'])
         self.properties = {"GROUP_INDEX": os.environ["GROUP_INDEX"]}
-        all_training = os.walk(
-            os.path.join(os.sep, 'data', 'new_split', f'fold_{self.index}'))
-        img_paths = []
-        labels = []
-        self.new_labels = []
-        for d in all_training:
-            if "all" in d[0]:
-                for img_name in d[2]:
-                    img_paths.append(os.path.join(d[0], img_name))
-                    labels.append("0")
-            elif "hem" in d[0]:
-                for img_name in d[2]:
-                    img_paths.append(os.path.join(d[0], img_name))
-                    labels.append("1")
-        self.img_paths, self.labels = np.array(img_paths), np.array(labels)
-        d = {'images': self.img_paths, 'labels': labels}
-        self.data = pd.DataFrame(data=d)
-
-        self.model = get_cnn_model_1(IMAGE_SIZE + (3,))
-        sgd_opt = tf.keras.optimizers.SGD(learning_rate=0.001)
-        metrics = ["accuracy", tf.keras.metrics.Precision(name="precision")]
-        self.metric_names = ["accuracy", "precision"]
-        self.core_idg = ImageDataGenerator(horizontal_flip=True,
-                                           vertical_flip=True,
-                                           brightness_range=[0.9, 1.0])
-        self.model.compile(
-            optimizer=sgd_opt,
-            loss=tf.keras.losses.BinaryCrossentropy(),
-            metrics=metrics
-        )
-        self.num_local_rounds = 600
+        self.num_local_rounds = 8333//BATCH_SIZE
         self.start_server(server_address=DEFAULT_SERVER_ADDRESS, config=None,
                       strategy=None)
 
@@ -137,8 +147,6 @@ class SpecialClientImplementation(fl.client.NumPyClient):
         )
         total_lengths = 0
         self.model.set_weights(parameters)
-        log(INFO, f"{type(parameters[0])}")
-        log(INFO, f"{type(weights_to_parameters(parameters).tensors[0])}")
         new_params, lengths = self.server.fit_client_local(self.model.get_weights(),
                                                            self.round)
         total_lengths += lengths
@@ -146,14 +154,13 @@ class SpecialClientImplementation(fl.client.NumPyClient):
             new_params, lengths = self.server.fit_client_local(new_params, self.round)
             total_lengths += lengths
         self.round += 1
-        if self.round == config["num_rounds"]:
+        if self.round == EPOCHS:
             self.end_server()
         log(INFO, "gathered weights")
         return new_params, total_lengths, {}
 
     def evaluate(self, parameters, config):  # type: ignore
         self.model.set_weights(parameters)
-        losses, lengths, metrics = 0.0, 10, {m: 0.0 for m in self.metric_names}
-        if self.round == config["num_rounds"]:
-            self.end_server()
-        return losses, lengths, metrics
+        loss_aggregated, metrics_aggregated, length, (results, failures) = \
+            self.server.evaluate(self.round-1)
+        return loss_aggregated, length, metrics_aggregated

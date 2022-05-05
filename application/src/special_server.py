@@ -142,8 +142,8 @@ class SpecialServer(Server):
         if res is None:
             return None
         # Deconstruct
-        loss, _, results_and_failures = res
-        return loss, results_and_failures
+        loss, _, length, results_and_failures = res
+        return loss, length, results_and_failures
 
     def evaluate_round(
         self, rnd: int
@@ -180,8 +180,8 @@ class SpecialServer(Server):
         # Aggregate the evaluation results
         aggregated_result = self.strategy.aggregate_evaluate(rnd, results, failures)
         log(INFO, f"Evaluate results look like {aggregated_result}")
-        loss_aggregated, metrics_aggregated = aggregated_result
-        return loss_aggregated, metrics_aggregated, (results, failures)
+        loss_aggregated, length, metrics_aggregated = aggregated_result
+        return loss_aggregated, metrics_aggregated, length, (results, failures)
 
     def fit_round(
         self,

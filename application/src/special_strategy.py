@@ -33,11 +33,11 @@ class SpecialFedAvg(Strategy):
     # pylint: disable=too-many-arguments,too-many-instance-attributes
     def __init__(
         self,
-        fraction_fit: float = 0.1,
-        fraction_eval: float = 0.1,
-        min_fit_clients: int = 2,
-        min_eval_clients: int = 2,
-        min_available_clients: int = 2,
+        fraction_fit: float = 1,
+        fraction_eval: float = 1,
+        min_fit_clients: int = 1,
+        min_eval_clients: int = 1,
+        min_available_clients: int = 1,
         eval_fn: Optional[
             Callable[[Weights], Optional[Tuple[float, Dict[str, Scalar]]]]
         ] = None,
@@ -240,4 +240,5 @@ class SpecialFedAvg(Strategy):
                 for _, evaluate_res in results
             ]
         )
-        return loss_aggregated, {}
+        lengths = sum([evaluate_res.num_examples for _, evaluate_res in results])
+        return loss_aggregated, lengths, {}
