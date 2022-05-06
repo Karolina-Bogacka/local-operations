@@ -44,9 +44,9 @@ ds_params = dict(
 
 
 def start_client(id, config):
-    log(INFO, f"{config.server_address}:8081")
+    log(INFO, f"{config.server_address}:8082")
     client = LOCifarClient()
-    start_numpy_client(server_address=f"{config.server_address}:8081",
+    start_numpy_client(server_address=f"{config.server_address}:8082",
                                  client=client)
 
 def load_data():

@@ -2,7 +2,7 @@ version: '3'
 services:
   local_operations:
     environment:
-      - USER_INDEX=3
+      - USER_INDEX=1
       - GROUP_INDEX=1
     restart: always
     build: application

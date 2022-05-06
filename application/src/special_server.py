@@ -142,8 +142,8 @@ class SpecialServer(Server):
         if res is None:
             return None
         # Deconstruct
-        loss, _, length, results_and_failures = res
-        return loss, length, results_and_failures
+        loss, metrics, length, results_and_failures = res
+        return loss, length, metrics, results_and_failures
 
     def evaluate_round(
         self, rnd: int

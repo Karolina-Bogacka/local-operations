@@ -1,4 +1,6 @@
 import os
+import pickle
+import time
 from logging import INFO
 from typing import Optional, Dict
 
@@ -40,7 +42,7 @@ def start_middle_client(config):
         server_address=f"{config.server_address}:{FEDERATED_PORT}", client=client)
 
 
-DEFAULT_SERVER_ADDRESS = "[::]:8081"
+DEFAULT_SERVER_ADDRESS = "[::]:8082"
 
 
 class SpecialClientImplementation(fl.client.NumPyClient):
@@ -161,7 +163,7 @@ class SpecialClientImplementation(fl.client.NumPyClient):
 
     def evaluate(self, parameters, config):  # type: ignore
         self.model.set_weights(parameters)
-        loss_aggregated, metrics_aggregated, length, (results, failures) = \
+        loss_aggregated, length, metrics_aggregated, (results, failures) = \
             self.server.evaluate(self.round-1)
         with open(os.path.join(os.sep, "code", "application", "results.pkl"),
                   'wb') as handle:
