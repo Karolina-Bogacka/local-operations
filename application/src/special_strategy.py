@@ -35,9 +35,9 @@ class SpecialFedAvg(Strategy):
         self,
         fraction_fit: float = 1,
         fraction_eval: float = 1,
-        min_fit_clients: int = 1,
-        min_eval_clients: int = 1,
-        min_available_clients: int = 1,
+        min_fit_clients: int = 3,
+        min_eval_clients: int = 3,
+        min_available_clients: int = 3,
         eval_fn: Optional[
             Callable[[Weights], Optional[Tuple[float, Dict[str, Scalar]]]]
         ] = None,
