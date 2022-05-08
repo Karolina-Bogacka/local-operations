@@ -6,8 +6,6 @@ import uvicorn
 from flwr.client import start_numpy_client
 from flwr.common.logger import log
 
-from application.src.local_clients import start_client
-from application.src.special_client_implementation import start_middle_client
 from application.src.big_client import BigCifarClient
 from config import PORT, HOST, DB_PORT
 from fastapi import BackgroundTasks

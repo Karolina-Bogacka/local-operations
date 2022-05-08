@@ -23,7 +23,6 @@ from tensorflow.keras.layers import Conv2D, Dropout, Flatten, Dense
 from tensorflow.keras.optimizers import SGD
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
-from application.src.local_clients import BATCH_SIZE
 from application.src.decentralized_fedavg import DecentralizedFedAvg
 from application.src.decentralized_server import DecentralizedServer
 from application.src.small_client import SmallCifarClient
@@ -48,6 +47,17 @@ ds_params = dict(
     seed=SEED
 )
 
+def start_in_thread_client(client: SmallCifarClient):
+    to_connect_index = int(os.environ.get("TO_CONNECT"))
+    group_size = int(os.environ.get("GROUP_SIZE"))
+    to_connect = f"appv{to_connect_index}_local_operations_1:8080"
+    try:
+        start_numpy_client(to_connect, client)
+    except Exception as err:
+        log(INFO, f"Caught exception {err}")
+        new_index = (to_connect_index+1)%group_size
+        to_connect = f"appv{new_index}_local_operations_1:8080"
+        start_numpy_client(to_connect, client)
 
 def start_big_client(id, config):
     log(INFO, f"Connect big client to main server {config.server_address}:8080")
@@ -87,11 +97,11 @@ def load_partition(idx: int):
     """Load 1/10th of the training and test data to simulate a partition."""
     (x_train, y_train), (x_test, y_test) = load_data()
     return (
-               x_train[idx * 8333: (idx + 1) * 8333],
-               y_train[idx * 8333: (idx + 1) * 8333],
+               x_train[idx * 5000: (idx + 1) * 5000],
+               y_train[idx * 5000: (idx + 1) * 5000],
            ), (
-               x_test[idx * 1666: (idx + 1) * 1666],
-               y_test[idx * 1666: (idx + 1) * 1666],
+               x_test[idx * 1000: (idx + 1) * 1000],
+               y_test[idx * 1000: (idx + 1) * 1000],
            )
 
 DEFAULT_SERVER_ADDRESS = f"[::]:8080"
@@ -152,6 +162,7 @@ class BigCifarClient(fl.client.NumPyClient):
         self.rounds = 5
         # start server and client manager
         client_manager = SimpleClientManager()
+        self.lengths = 0
         self.config = config.dict()
         log(INFO, "after first")
         config_s = {"num_rounds": 1, "round_timeout": None}
@@ -203,8 +214,8 @@ class BigCifarClient(fl.client.NumPyClient):
         e = threading.Event()
         self.client = SmallCifarClient(e)
         t1 = threading.Thread(name='small client thread',
-                              target=start_numpy_client,
-                              args=(f"{config.server_address}:8080", self.client))
+                              target=start_in_thread_client,
+                              args=(self.client,))
         t1.start()
 
     def get_parameters(self):
@@ -217,16 +228,18 @@ class BigCifarClient(fl.client.NumPyClient):
     def fit(self, parameters, config):
         log(INFO, f"Starting training for n rounds {len(parameters)}")
         self.model.set_weights(parameters)
+        lengths = 0
         for n in range(self.rounds):
             log(INFO, f"Fit in round {n}")
-            self.weights, self.lengths = self.server.fit_client_local(
+            self.weights, l = self.server.fit_client_local(
                 self.model.get_weights(), n)
+            lengths += l
             log(INFO, f"Stuck waiting {self.client.flag.is_set()}")
             self.client.flag.wait()
             self.model.set_weights(self.client.model.get_weights())
             self.client.flag.clear()
             log(INFO, f"Cleared flag to {self.client.flag.is_set()}")
-        return self.model.get_weights(), BATCH_SIZE, {}
+        return self.model.get_weights(), lengths, {}
 
     def evaluate(self, parameters, config):
         self.model.set_weights(parameters)

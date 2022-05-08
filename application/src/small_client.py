@@ -70,12 +70,13 @@ def load_partition(idx: int):
     """Load 1/10th of the training and test data to simulate a partition."""
     (x_train, y_train), (x_test, y_test) = load_data()
     return (
-        x_train[idx * 8333: (idx + 1) * 8333],
-        y_train[idx * 8333: (idx + 1) * 8333],
-    ), (
-        x_test[idx * 1666: (idx + 1) * 1666],
-        y_test[idx * 1666: (idx + 1) * 1666],
-    )
+               x_train[idx * 5000: (idx + 1) * 5000],
+               y_train[idx * 5000: (idx + 1) * 5000],
+           ), (
+               x_test[idx * 1000: (idx + 1) * 1000],
+               y_test[idx * 1000: (idx + 1) * 1000],
+           )
+
 
 class SmallCifarClient(fl.client.NumPyClient):
 
@@ -129,9 +130,8 @@ class SmallCifarClient(fl.client.NumPyClient):
         self.current_epoch = 0
         self.current_step = 0
         self.step_diff = 1
-        self.possible_steps = len(self.x_train)//(BATCH_SIZE*self.step_diff)
+        self.possible_steps = len(self.x_train) // (BATCH_SIZE * self.step_diff)
         self.flag = flag
-
 
     def get_parameters(self):
         log(INFO, "Returned parameters")
@@ -157,8 +157,7 @@ class SmallCifarClient(fl.client.NumPyClient):
         }
         self.flag.set()
         log(INFO, f"Flag here set to {self.flag.is_set()} with {results}")
-        return self.model.get_weights(), BATCH_SIZE, {}
-
+        return self.model.get_weights(), len(self.x_train), {}
 
     def evaluate(self, parameters, config):
         self.model.set_weights(parameters)
