@@ -2,19 +2,14 @@ version: '3'
 services:
   local_operations:
     environment:
-      - USER_INDEX=1
-      - GROUP_INDEX=1
+      - USER_INDEX=${USER_INDEX}
+      - TO_CONNECT=${TO_CONNECT_INDEX}
     restart: always
     build: application
     networks:
       - default
     ports:
       - '905${USER_INDEX}:9050'
-      #- '8082:8082'
-    #volumes:
-    #  - type: bind
-    #    source: \\wsl.localhost\Ubuntu20.04LTS\home\new\leaf\data\femnist\data
-    #    target: /data
     volumes:
       - type: bind
         source: /Users/karolinabogacka/PycharmProjects/fl-local-operations/cifar-10-batches-py

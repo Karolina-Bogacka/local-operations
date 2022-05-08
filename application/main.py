@@ -3,10 +3,12 @@ from logging import INFO
 
 import gridfs
 import uvicorn
+from flwr.client import start_numpy_client
 from flwr.common.logger import log
 
 from application.src.local_clients import start_client
 from application.src.special_client_implementation import start_middle_client
+from application.src.big_client import BigCifarClient
 from config import PORT, HOST, DB_PORT
 from fastapi import BackgroundTasks
 from fastapi import FastAPI, status, UploadFile, File, Response, HTTPException
@@ -18,25 +20,31 @@ from application.utils import formulate_id
 from pydloc.models import LOTrainingConfiguration, MLModel
 
 app = FastAPI()
-
+big_client: BigCifarClient = None
 
 # Receive configuration for training job
-@app.post("/job/config/{id}")
-def receive_updated(id, data: LOTrainingConfiguration, background_tasks: BackgroundTasks):
+@app.post("/job/big/config/{id}")
+def receive_big_client_updated(id, data: LOTrainingConfiguration, background_tasks:
+BackgroundTasks):
     try:
-        log(INFO, "Config received")
-        start_client(id, data)
+        global big_client
+        log(INFO, f"Connect big client to main server {data.server_address}:8080")
+        big_client = BigCifarClient(data)
+        start_numpy_client(server_address=f"{data.server_address}:8080",
+                           client=big_client)
     except Exception as e:
         print("An exception occurred ::", e)
         return 500
     return 200
 
 # Receive configuration for training job
-@app.post("/job/middle/config/{id}")
+@app.post("/job/small/config/{id}")
 def receive_middle_updated(id, data: LOTrainingConfiguration, background_tasks:
 BackgroundTasks):
     try:
-        start_middle_client(data)
+        log(INFO, f"{big_client}")
+        log(INFO, f"Connect big client to main server {data.server_address}:8080")
+        big_client.start_small_client(data)
     except Exception as e:
         print("An exception occurred ::", e)
         return 500

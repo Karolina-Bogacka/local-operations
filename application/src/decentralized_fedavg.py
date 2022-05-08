@@ -27,7 +27,7 @@ than or equal to the values of `min_fit_clients` and `min_eval_clients`.
 """
 
 
-class SpecialFedAvg(Strategy):
+class DecentralizedFedAvg(Strategy):
     """Configurable FedAvg strategy implementation."""
 
     # pylint: disable=too-many-arguments,too-many-instance-attributes
@@ -152,10 +152,6 @@ class SpecialFedAvg(Strategy):
         clients = client_manager.sample(
             num_clients=sample_size, min_num_clients=min_num_clients
         )
-        for client in clients:
-            log(INFO, f"This client's cid is {client.cid} with properties "
-                      f"{client.properties} of bridge {client.bridge} active with "
-                      f"{client.bridge._is_closed()}")
 
         # Return client/config pairs
         return [(client, fit_ins) for client in clients]

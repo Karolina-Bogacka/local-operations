@@ -36,7 +36,7 @@ def set_strategy(strategy: Optional[Strategy]) -> Strategy:
     return strategy if strategy is not None else SpecialFedAvg()
 
 
-class SpecialServer(Server):
+class DecentralizedServer(Server):
     """Flower server."""
 
     def __init__(
@@ -49,6 +49,7 @@ class SpecialServer(Server):
         )
         self.strategy: Strategy = set_strategy(strategy)
         self.max_workers: Optional[int] = None
+        self.lengths = 0
 
     def client_manager(self) -> ClientManager:
         """Return ClientManager."""
@@ -56,7 +57,7 @@ class SpecialServer(Server):
 
     def fit_client_local(self, weights, current_round):
         self.weights = weights
-        log(INFO, "Middle level FL starting")
+        log(INFO, "Ring level FL starting")
         log(
             DEBUG,
             "before fit round: strategy has %s clients",
@@ -65,6 +66,7 @@ class SpecialServer(Server):
         res_fit = self.fit_round(rnd=current_round)
         if res_fit:
             parameters_aggregated, metrics_aggregated, lengths, (results, failures) = res_fit
+            self.lengths += lengths
             if parameters_aggregated:
                 self.weights = parameters_to_weights(parameters_aggregated)
                 self.parameters = parameters_aggregated
