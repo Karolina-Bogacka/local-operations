@@ -146,7 +146,7 @@ class SmallCifarClient(fl.client.NumPyClient):
     def fit(self, parameters, config):
         log(INFO, f"Parameter length is {len(parameters)}")
         self.model.set_weights(parameters)
-        log(INFO, f'Iteration of index {self.current_epoch}')
+        log(INFO, f'Iteration of index {self.current_round}')
         history = self.model.fit(
             self.local_gen,
             batch_size=BATCH_SIZE,
