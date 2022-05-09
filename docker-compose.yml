@@ -3,7 +3,7 @@ services:
   local_operations:
     environment:
       - USER_INDEX=${USER_INDEX}
-      - TO_CONNECT=${TO_CONNECT_INDEX}
+      - TO_CONNECT=${TO_CONNECT}
       - GROUP_SIZE=${GROUP_SIZE}
     restart: always
     build: application

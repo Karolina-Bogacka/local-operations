@@ -27,7 +27,7 @@ from application.src.decentralized_fedavg import DecentralizedFedAvg
 from application.src.decentralized_server import DecentralizedServer
 from application.src.small_client import SmallCifarClient
 
-EPOCHS=5
+EPOCHS = 5
 
 current_jobs = {}
 ERAS = 1
@@ -47,6 +47,7 @@ ds_params = dict(
     seed=SEED
 )
 
+
 def start_in_thread_client(client: SmallCifarClient):
     to_connect_index = int(os.environ.get("TO_CONNECT"))
     group_size = int(os.environ.get("GROUP_SIZE"))
@@ -55,9 +56,10 @@ def start_in_thread_client(client: SmallCifarClient):
         start_numpy_client(to_connect, client)
     except Exception as err:
         log(INFO, f"Caught exception {err}")
-        new_index = (to_connect_index+1)%group_size
+        new_index = (to_connect_index + 1) % group_size
         to_connect = f"appv{new_index}_local_operations_1:8080"
         start_numpy_client(to_connect, client)
+
 
 def start_big_client(id, config):
     log(INFO, f"Connect big client to main server {config.server_address}:8080")
@@ -104,7 +106,9 @@ def load_partition(idx: int):
                y_test[idx * 1000: (idx + 1) * 1000],
            )
 
+
 DEFAULT_SERVER_ADDRESS = f"[::]:8080"
+
 
 class BigCifarClient(fl.client.NumPyClient):
 
@@ -173,17 +177,12 @@ class BigCifarClient(fl.client.NumPyClient):
                                           strategy=strategy)
         self.start_server()
 
-
     def start_server(
             self,
             server_address: str = DEFAULT_SERVER_ADDRESS,
             config: Optional[Dict[str, int]] = None,
             strategy: Optional[Strategy] = None
     ) -> None:
-
-        #initialized_server, initialized_config = _init_defaults(self.server, config,
-        #
-        #                                                        strategy)
         self.grpc_server = start_grpc_server(
             client_manager=self.server.client_manager(),
             server_address=DEFAULT_SERVER_ADDRESS,
@@ -211,8 +210,8 @@ class BigCifarClient(fl.client.NumPyClient):
         self.grpc_server.stop(grace=1)
 
     def start_small_client(self, config):
-        e = threading.Event()
-        self.client = SmallCifarClient(e)
+        events = [threading.Event() for _ in range(self.rounds)]
+        self.client = SmallCifarClient(events)
         t1 = threading.Thread(name='small client thread',
                               target=start_in_thread_client,
                               args=(self.client,))
@@ -231,15 +230,17 @@ class BigCifarClient(fl.client.NumPyClient):
         lengths = 0
         for n in range(self.rounds):
             log(INFO, f"Fit in round {n}")
-            self.weights, l = self.server.fit_client_local(
-                self.model.get_weights(), n)
-            lengths += l
-            log(INFO, f"Stuck waiting {self.client.flag.is_set()}")
-            self.client.flag.wait()
+            l = self.server.fit_client_local(
+                self.model.get_weights(), n, lengths)
+            log(INFO, f"Stuck waiting {self.client.events[n].is_set()}")
+            self.client.events[n].wait()
+            lengths = self.client.lengths
             self.model.set_weights(self.client.model.get_weights())
-            self.client.flag.clear()
-            log(INFO, f"Cleared flag to {self.client.flag.is_set()}")
-        return self.model.get_weights(), lengths, {}
+            log(INFO, f"Cleared flag to {self.client.events[n].is_set()}")
+        for e in self.client.events:
+            e.clear()
+        self.client.current_round = 0
+        return self.model.get_weights(), self.client.lengths, {}
 
     def evaluate(self, parameters, config):
         self.model.set_weights(parameters)
@@ -255,5 +256,6 @@ class BigCifarClient(fl.client.NumPyClient):
                 self.accuracies,
                        "times": self.times}
             pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            self.model.save(os.path.join(os.sep, "code", "application", "model"))
         metrics = {"accuracy": accuracy}
         return losses, lengths, metrics

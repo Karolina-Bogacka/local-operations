@@ -136,13 +136,11 @@ class DecentralizedFedAvg(Strategy):
         return loss, metrics
 
     def configure_fit(
-        self, rnd: int, parameters: Parameters, client_manager: ClientManager
+        self, rnd: int, parameters: Parameters, client_manager: ClientManager, lengths:
+            int
     ) -> List[Tuple[ClientProxy, FitIns]]:
         """Configure the next round of training."""
-        config = {"random": 0.0}
-        if self.on_fit_config_fn is not None:
-            # Custom fit config function provided
-            config = self.on_fit_config_fn(rnd)
+        config = {"lengths": lengths}
         fit_ins = FitIns(parameters, config)
 
         # Sample clients

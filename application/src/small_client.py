@@ -80,7 +80,7 @@ def load_partition(idx: int):
 
 class SmallCifarClient(fl.client.NumPyClient):
 
-    def __init__(self, flag):
+    def __init__(self, events):
         self.index = os.getenv('USER_INDEX')
         log(INFO,
             f"The loweliest client of {self.index} is in init")
@@ -131,7 +131,9 @@ class SmallCifarClient(fl.client.NumPyClient):
         self.current_step = 0
         self.step_diff = 1
         self.possible_steps = len(self.x_train) // (BATCH_SIZE * self.step_diff)
-        self.flag = flag
+        self.events = events
+        self.current_round = 0
+        self.lengths = 0
 
     def get_parameters(self):
         log(INFO, "Returned parameters")
@@ -155,9 +157,11 @@ class SmallCifarClient(fl.client.NumPyClient):
             "loss": history.history["loss"][0],
             "accuracy": history.history["accuracy"][0],
         }
-        self.flag.set()
-        log(INFO, f"Flag here set to {self.flag.is_set()} with {results}")
-        return self.model.get_weights(), len(self.x_train), {}
+        self.lengths = int(config["lengths"]) + len(self.x_train)
+        self.events[self.current_round].set()
+        log(INFO, f"Flag here set to {self.events[self.current_round].is_set()} with {results}")
+        self.current_round += 1
+        return self.model.get_weights(), self.lengths, {}
 
     def evaluate(self, parameters, config):
         self.model.set_weights(parameters)

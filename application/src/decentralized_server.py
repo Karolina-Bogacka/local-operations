@@ -20,6 +20,8 @@ from flwr.server.client_proxy import ClientProxy
 from flwr.server.history import History
 from flwr.server.strategy import FedAvg, Strategy
 
+from application.src.decentralized_fedavg import DecentralizedFedAvg
+
 FitResultsAndFailures = Tuple[List[Tuple[ClientProxy, FitRes]], List[BaseException]]
 EvaluateResultsAndFailures = Tuple[
     List[Tuple[ClientProxy, EvaluateRes]], List[BaseException]
@@ -31,7 +33,7 @@ ReconnectResultsAndFailures = Tuple[
 
 def set_strategy(strategy: Optional[Strategy]) -> Strategy:
     """Return Strategy."""
-    return strategy if strategy is not None else SpecialFedAvg()
+    return strategy if strategy is not None else DecentralizedFedAvg()
 
 
 class DecentralizedServer(Server):
@@ -53,7 +55,7 @@ class DecentralizedServer(Server):
         """Return ClientManager."""
         return self._client_manager
 
-    def fit_client_local(self, weights, current_round):
+    def fit_client_local(self, weights, current_round, lengths):
         self.weights = weights
         log(INFO, "Ring level FL starting")
         log(
@@ -61,14 +63,8 @@ class DecentralizedServer(Server):
             "before fit round: strategy has %s clients",
             self._client_manager.num_available(),
         )
-        res_fit = self.fit_round(rnd=current_round)
-        if res_fit:
-            parameters_aggregated, metrics_aggregated, lengths, (results, failures) = res_fit
-            self.lengths += lengths
-            if parameters_aggregated:
-                self.weights = parameters_to_weights(parameters_aggregated)
-                self.parameters = parameters_aggregated
-        return self.weights, lengths
+        res_fit = self.fit_round(rnd=current_round, lengths=lengths)
+        return res_fit
 
 
     # pylint: disable=too-many-locals
@@ -185,7 +181,8 @@ class DecentralizedServer(Server):
 
     def fit_round(
         self,
-        rnd: int
+        rnd: int,
+            lengths
     ) -> Optional[
         Tuple[Optional[Parameters], Dict[str, Scalar], FitResultsAndFailures]
     ]:
@@ -194,7 +191,7 @@ class DecentralizedServer(Server):
         # Get clients and their respective instructions from strategy
         client_instructions = self.strategy.configure_fit(
             rnd=rnd, parameters=weights_to_parameters(self.weights),
-            client_manager=self._client_manager
+            client_manager=self._client_manager, lengths=lengths
         )
 
         if not client_instructions:
@@ -208,23 +205,13 @@ class DecentralizedServer(Server):
         )
 
         # Collect `fit` results from all clients participating in this round
-        results, failures = fit_clients(
+        result = fit_clients(
             client_instructions=client_instructions,
             max_workers=None,
             timeout=None,
         )
-        log(
-            DEBUG,
-            "fit_round received %s results and %s failures",
-            len(results),
-            len(failures),
-        )
 
-        # Aggregate training results
-        aggregated_result = self.strategy.aggregate_fit(rnd, results, failures)
-
-        parameters_aggregated, metrics_aggregated, lengths = aggregated_result
-        return parameters_aggregated, metrics_aggregated, lengths, (results, failures)
+        return result
 
     def disconnect_all_clients(self) -> None:
         """Send shutdown signal to all clients."""
@@ -300,24 +287,7 @@ def fit_clients(
             executor.submit(fit_client, client_proxy, ins)
             for client_proxy, ins in client_instructions
         }
-        finished_fs, _ = concurrent.futures.wait(
-            fs=submitted_fs,
-            timeout=None,  # Handled in the respective communication stack
-        )
-
-        # Gather results
-    results: List[Tuple[ClientProxy, FitRes]] = []
-    failures: List[BaseException] = []
-    for future in finished_fs:
-        failure = future.exception()
-        log(INFO, f"Exception of nature: {failure}")
-        if failure is not None:
-            failures.append(failure)
-        else:
-            # Success case
-            result = future.result()
-            results.append(result)
-    return results, failures
+    return True
 
 
 def fit_client(
