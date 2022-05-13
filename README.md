@@ -4,7 +4,7 @@
 Run `docker-compose -f docker-compose.yml up` to run the server.
 Use FastAPI functionalities to test the API on http://127.0.0.1:9050/docs.
 Sample request body for post /job/config/{id}:
-**{"client_type_id": "local1",
+{"client_type_id": "local1",
  "server_address": "training_collector",
  "optimizer": "adam",
  "eval_metrics": ["MSE"],
@@ -17,7 +17,7 @@ Sample request body for post /job/config/{id}:
    "batch_size": "64",
    "steps_per_epoch": "32",
    "epochs": "5",
-   "learning_rate": "0.001"}]}**
+   "learning_rate": "0.001"}]}
 
 # 1. add env file like in base
 # 2. 

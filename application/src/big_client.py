@@ -56,7 +56,8 @@ def start_in_thread_client(client: SmallCifarClient):
         start_numpy_client(to_connect, client)
     except Exception as err:
         log(INFO, f"Caught exception {err}")
-        new_index = (to_connect_index + 1) % group_size
+        new_index = (to_connect_index + 1) % group_size + \
+                    ((to_connect_index+1)//group_size)*group_size
         to_connect = f"appv{new_index}_local_operations_1:8080"
         start_numpy_client(to_connect, client)
 
@@ -216,6 +217,7 @@ class BigCifarClient(fl.client.NumPyClient):
                               target=start_in_thread_client,
                               args=(self.client,))
         t1.start()
+        t1.join()
 
     def get_parameters(self):
         return self.model.get_weights()
