@@ -22,6 +22,8 @@ from tensorflow.keras.layers import BatchNormalization, MaxPool2D, InputLayer
 from tensorflow.keras.layers import Conv2D, Dropout, Flatten, Dense
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
+from application.config import SERVER_ADDRESS
+
 current_jobs = {}
 ERAS = 1
 EPOCHS = 60
@@ -44,9 +46,11 @@ ds_params = dict(
 
 
 def start_client(id, config):
-    log(INFO, f"{config.server_address}:8082")
+    log(INFO, f"appv{os.environ.get('TO_CONNECT')}_local_operations_1:8081")
     client = LOCifarClient()
-    start_numpy_client(server_address=f"{config.server_address}:8082",
+    start_numpy_client(server_address=f"appv"
+                                      f""
+                                      f"{os.environ.get('TO_CONNECT')}_local_operations_1:8081",
                                  client=client)
 
 def load_data():
@@ -80,11 +84,11 @@ def load_partition(idx: int):
     """Load 1/10th of the training and test data to simulate a partition."""
     (x_train, y_train), (x_test, y_test) = load_data()
     return (
-        x_train[idx * 8333 : (idx + 1) * 8333],
-        y_train[idx * 8333 : (idx + 1) * 8333],
+        x_train[idx * 5000: (idx + 1) * 5000],
+        y_train[idx * 5000: (idx + 1) * 5000],
     ), (
-        x_test[idx * 1666 : (idx + 1) * 1666],
-        y_test[idx * 1666 : (idx + 1) * 1666],
+        x_test[idx * 1000: (idx + 1) * 1000],
+        y_test[idx * 1000: (idx + 1) * 1000],
     )
 
 class LOCifarClient(fl.client.NumPyClient):
@@ -193,5 +197,6 @@ class LOCifarClient(fl.client.NumPyClient):
                 self.accuracies,
                        "times": self.times}
             pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            self.model.save(os.path.join(os.sep, "code", "application", "model"))
         metrics = {"accuracy": accuracy}
         return losses, lengths, metrics

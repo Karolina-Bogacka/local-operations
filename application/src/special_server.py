@@ -40,7 +40,8 @@ class SpecialServer(Server):
     """Flower server."""
 
     def __init__(
-        self, client_manager: ClientManager, strategy: Optional[Strategy] = None
+        self, client_manager: ClientManager, strategy: Optional[Strategy] = None,
+            timeout: int = None
     ) -> None:
         self._client_manager: ClientManager = client_manager
         self.weights: Weights = []
@@ -48,6 +49,7 @@ class SpecialServer(Server):
             tensors=[], tensor_type="numpy.ndarray"
         )
         self.strategy: Strategy = set_strategy(strategy)
+        self.timeout = timeout
         self.max_workers: Optional[int] = None
 
     def client_manager(self) -> ClientManager:
@@ -211,7 +213,7 @@ class SpecialServer(Server):
         results, failures = fit_clients(
             client_instructions=client_instructions,
             max_workers=None,
-            timeout=None,
+            timeout=self.timeout,
         )
         log(
             DEBUG,
@@ -295,14 +297,13 @@ def fit_clients(
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         log(INFO, f"{client_instructions[0][0].cid}")
         log(INFO, f"{client_instructions[0][1].parameters.tensor_type}")
-        timeout=None
         submitted_fs = {
             executor.submit(fit_client, client_proxy, ins)
             for client_proxy, ins in client_instructions
         }
         finished_fs, _ = concurrent.futures.wait(
             fs=submitted_fs,
-            timeout=None,  # Handled in the respective communication stack
+            timeout=timeout,  # Handled in the respective communication stack
         )
 
         # Gather results

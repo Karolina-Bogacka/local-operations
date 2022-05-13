@@ -39,6 +39,9 @@ class LOTrainingConfiguration(BaseModel):
     shape: List[int]
     model_id: int
     model_version: int
+    timeout: int
+    min_fit_clients: int
+    min_available_clients: int
     config: List[BasicConfiguration]
 
     class Config:

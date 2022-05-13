@@ -33,16 +33,15 @@ from application.src.local_clients import  IMAGE_SIZE, BATCH_SIZE
 from application.src.special_server import SpecialServer
 from application.src.special_strategy import SpecialFedAvg
 
-EPOCHS=50
-
+EPOCHS = 16
+DEFAULT_SERVER_ADDRESS = f"[::]:8081"
 
 def start_middle_client(config):
     client = SpecialClientImplementation(config)
+    log(INFO, f"Default server address is {DEFAULT_SERVER_ADDRESS}")
     fl.client.start_numpy_client(
         server_address=f"{config.server_address}:{FEDERATED_PORT}", client=client)
 
-
-DEFAULT_SERVER_ADDRESS = "[::]:8082"
 
 
 class SpecialClientImplementation(fl.client.NumPyClient):
@@ -55,8 +54,12 @@ class SpecialClientImplementation(fl.client.NumPyClient):
         self.conf = {"num_rounds": 1, "round_timeout": None}
         log(INFO, "after 2nd")
         # here change the strategy in a minute to a custom one
-        strategy = SpecialFedAvg()
-        self.server = SpecialServer(client_manager=client_manager, strategy=strategy)
+        log(INFO, f"{self.config}")
+        strategy = SpecialFedAvg(min_fit_clients=config.min_fit_clients,
+                                 min_available_clients=config.min_available_clients,
+                                 min_eval_clients=config.min_fit_clients)
+        self.server = SpecialServer(client_manager=client_manager, strategy=strategy,
+                                    timeout=int(config.timeout))
         self.index = os.getenv('USER_INDEX')
         self.losses = []
         self.grpc_server = None
@@ -90,7 +93,8 @@ class SpecialClientImplementation(fl.client.NumPyClient):
         self.model.compile(loss='categorical_crossentropy', optimizer=sgd,
                            metrics=['accuracy'])
         self.properties = {"GROUP_INDEX": os.environ["GROUP_INDEX"]}
-        self.num_local_rounds = 8333//BATCH_SIZE
+        self.num_local_rounds = (5000//BATCH_SIZE)*5
+        log(INFO, f"Epochs that will be ran locally {self.num_local_rounds}")
         self.start_server(server_address=DEFAULT_SERVER_ADDRESS, config=None,
                       strategy=None)
 

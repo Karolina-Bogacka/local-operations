@@ -97,6 +97,7 @@ class SpecialFedAvg(Strategy):
         self.initial_parameters = initial_parameters
         self.fit_metrics_aggregation_fn = fit_metrics_aggregation_fn
         self.evaluate_metrics_aggregation_fn = evaluate_metrics_aggregation_fn
+        self.round = 0
 
     def __repr__(self) -> str:
         rep = f"FedAvg(accept_failures={self.accept_failures})"
@@ -105,17 +106,24 @@ class SpecialFedAvg(Strategy):
     def num_fit_clients(self, num_available_clients: int) -> Tuple[int, int]:
         """Return the sample size and the required number of available
         clients."""
+        log(INFO, f"Sample in round {self.round}")
         num_clients = int(num_available_clients * self.fraction_fit)
-        return max(num_clients, self.min_fit_clients), self.min_available_clients
+        if self.round == 0:
+            return max(num_clients, self.min_fit_clients), self.min_available_clients
+        else:
+            return max(num_clients, self.min_fit_clients), self.min_fit_clients
+
 
     def num_evaluation_clients(self, num_available_clients: int) -> Tuple[int, int]:
         """Use a fraction of available clients for evaluation."""
         num_clients = int(num_available_clients * self.fraction_eval)
-        return max(num_clients, self.min_eval_clients), self.min_available_clients
+        log(INFO, f"Sample in round {self.round} with {self.min_eval_clients}")
+        return max(num_clients, self.min_eval_clients), self.min_eval_clients
+
 
     def initialize_parameters(
         self, client_manager: ClientManager
-    ) -> Optional[Parameters]:
+        ) -> Optional[Parameters]:
         """Initialize global model parameters."""
         initial_parameters = self.initial_parameters
         self.initial_parameters = None  # Don't keep initial parameters in memory
@@ -218,6 +226,7 @@ class SpecialFedAvg(Strategy):
             metrics_aggregated = self.fit_metrics_aggregation_fn(fit_metrics)
         elif rnd == 1:
             log(WARNING, "No fit_metrics_aggregation_fn provided")
+        self.round += 1
 
         return parameters_aggregated, metrics_aggregated, lengths
 
