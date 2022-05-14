@@ -33,7 +33,7 @@ from application.src.local_clients import  IMAGE_SIZE, BATCH_SIZE
 from application.src.special_server import SpecialServer
 from application.src.special_strategy import SpecialFedAvg
 
-EPOCHS = 16
+EPOCHS = 5
 DEFAULT_SERVER_ADDRESS = f"[::]:8081"
 
 def start_middle_client(config):

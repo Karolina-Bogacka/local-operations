@@ -46,11 +46,11 @@ ds_params = dict(
 
 
 def start_client(id, config):
-    log(INFO, f"appv{os.environ.get('TO_CONNECT')}_local_operations_1:8081")
+    log(INFO, f"appv{os.environ.get('TO_CONNECT')}-local_operations-1:8081")
     client = LOCifarClient()
     start_numpy_client(server_address=f"appv"
                                       f""
-                                      f"{os.environ.get('TO_CONNECT')}_local_operations_1:8081",
+                                      f"{os.environ.get('TO_CONNECT')}-local_operations-1:8081",
                                  client=client)
 
 def load_data():
@@ -84,11 +84,11 @@ def load_partition(idx: int):
     """Load 1/10th of the training and test data to simulate a partition."""
     (x_train, y_train), (x_test, y_test) = load_data()
     return (
-        x_train[idx * 5000: (idx + 1) * 5000],
-        y_train[idx * 5000: (idx + 1) * 5000],
+        x_train[idx * 6250: (idx + 1) * 6250],
+        y_train[idx * 6250: (idx + 1) * 6250],
     ), (
-        x_test[idx * 1000: (idx + 1) * 1000],
-        y_test[idx * 1000: (idx + 1) * 1000],
+        x_test[idx * 1250: (idx + 1) * 1250],
+        y_test[idx * 1250: (idx + 1) * 1250],
     )
 
 class LOCifarClient(fl.client.NumPyClient):
