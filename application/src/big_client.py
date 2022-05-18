@@ -51,14 +51,14 @@ ds_params = dict(
 def start_in_thread_client(client: SmallCifarClient):
     to_connect_index = int(os.environ.get("TO_CONNECT"))
     group_size = int(os.environ.get("GROUP_SIZE"))
-    to_connect = f"appv{to_connect_index}_local_operations_1:8080"
+    to_connect = f"appv{to_connect_index}-local_operations-1:8080"
     try:
         start_numpy_client(to_connect, client)
     except Exception as err:
         log(INFO, f"Caught exception {err}")
         new_index = (to_connect_index + 1) % group_size + \
                     ((to_connect_index+1)//group_size)*group_size
-        to_connect = f"appv{new_index}_local_operations_1:8080"
+        to_connect = f"appv{new_index}-local_operations-1:8080"
         start_numpy_client(to_connect, client)
 
 

@@ -2,18 +2,18 @@ version: '3'
 services:
   local_operations:
     environment:
-      - USER_INDEX=${USER_INDEX}
-      - TO_CONNECT=${TO_CONNECT}
-      - GROUP_SIZE=${GROUP_SIZE}
+      - USER_INDEX=0
+      - TO_CONNECT=1
+      - GROUP_SIZE=4
     restart: always
     build: application
     networks:
       - default
     ports:
-      - '905${USER_INDEX}:9050'
+      - '9050:9050'
     volumes:
       - type: bind
-        source: /Users/karolinabogacka/PycharmProjects/fl-local-operations/cifar-10-batches-py
+        source: ./cifar-10-batches-py
         target: /cifar-10-batches-py
 
 networks:
