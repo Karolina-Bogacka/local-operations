@@ -128,11 +128,11 @@ def load_partition(idx: int):
     """Load 1/10th of the training and test data to simulate a partition."""
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
     return (
-        x_train[idx * 8333 : (idx + 1) * 8333],
-        y_train[idx * 8333 : (idx + 1) * 8333],
+        x_train[idx * 6250 : (idx + 1) * 6250],
+        y_train[idx * 6250 : (idx + 1) * 6250],
     ), (
-        x_test[idx * 1666 : (idx + 1) * 1666],
-        y_test[idx * 1666 : (idx + 1) * 1666],
+        x_test[idx * 1250 : (idx + 1) * 1250],
+        y_test[idx * 1250 : (idx + 1) * 1250],
     )
 
 
@@ -282,7 +282,7 @@ class LOCifarClient(fl.client.NumPyClient):
             self.x_train,
             self.y_train,
             32,
-            epochs=1,
+            epochs=5,
             validation_split=0.1,
         )
         results = {
