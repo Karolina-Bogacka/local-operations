@@ -216,8 +216,7 @@ class LOCifarClient(MyClient):
             history = self.model.fit(
                 self.local_gen,
                 batch_size=BATCH_SIZE,
-                steps_per_epoch=self.step_diff,
-                epochs=1,
+                epochs=5,
             )
             results = {
                 "loss": history.history["loss"][0],
