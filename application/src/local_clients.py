@@ -140,7 +140,7 @@ def load_partition(idx: int):
     # Retrieving the images and their labels
     for i in range(classes):
         if i in division[idx]:
-            path = os.path.join('german-traffic', 'Train', str(i))
+            path = os.path.join(os.sep, 'german-traffic', 'Train', str(i))
             images = os.listdir(path)
             for a in images:
                 try:
@@ -159,7 +159,7 @@ def load_partition(idx: int):
     print(data.shape, labels.shape)
 
     # Splitting training and testing dataset
-    X_train, X_test, y_train, y_test = train_test_split(data, labels, test_size=0.2,
+    X_train, X_test, y_train, y_test = train_test_split(data, labels, test_size=0.1,
                                                         random_state=42)
 
     # Displaying the shape after the split
@@ -171,92 +171,7 @@ def load_partition(idx: int):
     return (X_train, y_train), (X_test, y_test)
 
 
-class LOLeukemiaClient(fl.client.NumPyClient):
 
-    def __init__(self):
-        self.index = int(os.getenv('USER_INDEX'))
-        self.losses = []
-        self.accuracies = []
-        self.precisions = []
-        all_training = os.walk(os.path.join(os.sep, 'data', 'new_split', f'fold_{self.index}'))
-        img_paths = []
-        labels = []
-        self.new_labels = []
-        for d in all_training:
-            if "all" in d[0]:
-                for img_name in d[2]:
-                    img_paths.append(os.path.join(d[0], img_name))
-                    labels.append("0")
-            elif "hem" in d[0]:
-                for img_name in d[2]:
-                    img_paths.append(os.path.join(d[0], img_name))
-                    labels.append("1")
-        self.img_paths, self.labels = np.array(img_paths), np.array(labels)
-        d = {'images': self.img_paths, 'labels': labels}
-        self.data = pd.DataFrame(data=d)
-        aug_model = tf.keras.Sequential([
-            tf.keras.layers.experimental.preprocessing.RandomFlip("horizontal_and_vertical"),
-            tf.keras.layers.experimental.preprocessing.RandomRotation(0.2),
-            tf.keras.layers.experimental.preprocessing.RandomContrast(0.1)
-        ])
-        self.model = get_cnn_model_1(IMAGE_SIZE + (3,))
-        adam_opt = tf.keras.optimizers.Adam(learning_rate=0.0001, amsgrad=True)
-        metrics = ["accuracy", tf.keras.metrics.Precision(name="precision")]
-        self.metric_names = ["accuracy", "precision"]
-        self.core_idg = ImageDataGenerator(horizontal_flip=True,
-                                           vertical_flip=True,
-                                           brightness_range=[0.9, 1.0],
-                                           validation_split=0.2)
-        self.model.compile(
-            optimizer=adam_opt,
-            loss=tf.keras.losses.BinaryCrossentropy(),
-            metrics=metrics
-        )
-        self.train_gen = self.core_idg.flow_from_directory(os.path.join(os.sep, 'data', 'new_split', f'fold_{self.index}'),
-                                                 class_mode='categorical',
-                                                 target_size=IMAGE_SIZE,
-                                                 color_mode='rgb',
-                                                 batch_size=BATCH_SIZE,
-                                                 shuffle=True,
-                                                 subset='training'
-                                                      )
-        self.valid_gen = self.core_idg.flow_from_directory(os.path.join(os.sep, 'data', 'new_split', f'fold_{self.index}'),
-                                                 class_mode='categorical',
-                                                 target_size=IMAGE_SIZE,
-                                                 color_mode='rgb',
-                                                 batch_size=BATCH_SIZE,
-                                                 shuffle=False,
-                                                 subset='validation')
-        self.steps, self.val_steps = self.train_gen.samples, self.valid_gen.samples
-
-    def get_parameters(self):
-        return self.model.get_weights()
-
-    def fit(self, parameters, config):
-        self.model.set_weights(parameters)
-        self.model.fit(
-            self.train_gen,
-            steps_per_epoch=self.steps//BATCH_SIZE,
-            epochs=EPOCHS,
-            validation_data=self.valid_gen,
-            validation_steps=self.val_steps//BATCH_SIZE,
-        )
-        self.valid_gen.reset()
-        self.train_gen.reset()
-        return self.model.get_weights(), len(self.img_paths), {}
-
-    def evaluate(self, parameters, config):
-        self.model.set_weights(parameters)
-        loss, accuracy, precision = model.evaluate(self.valid_gen, steps=self.val_steps // BATCH_SIZE)
-        losses, lengths, metrics = loss, len(self.val_steps), {'accuracy': accuracy, 'precision': precision}
-        self.valid_gen.reset()
-        self.losses.append(losses)
-        self.precisions.append(metrics["precision"])
-        self.accuracies.append(metrics["accuracy"])
-        with open(os.path.join(os.sep, "code", "application", "results.pkl"), 'wb') as handle:
-            results = {"losses": self.losses, "precision": self.precisions, "accuracy": self.accuracies}
-            pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        return losses, lengths, metrics
 
 
 class LOGermanClient(fl.client.NumPyClient):
@@ -273,7 +188,7 @@ class LOGermanClient(fl.client.NumPyClient):
         self.num_classes = self.y_test.shape[1]
         self.model = Sequential()
         self.model.add(Conv2D(filters=32, kernel_size=(5, 5), activation='relu',
-                         input_shape=X_train.shape[1:]))
+                         input_shape=self.x_train.shape[1:]))
         self.model.add(Conv2D(filters=32, kernel_size=(5, 5), activation='relu'))
         self.model.add(MaxPool2D(pool_size=(2, 2)))
         self.model.add(Dropout(rate=0.25))
