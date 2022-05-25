@@ -8,7 +8,7 @@ services:
     networks:
       - default
     ports:
-      - "905${USER_INDEX}:9050"
+      - "9051:9050"
     #volumes:
     #  - type: bind
     #    source: \\wsl.localhost\Ubuntu20.04LTS\home\new\leaf\data\femnist\data

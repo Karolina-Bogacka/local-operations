@@ -176,11 +176,11 @@ class LOCifarClient(MyClient):
                                            batch_size=BATCH_SIZE)
         self.losses = losses
         self.assigned_cluster = -1
-        self.lowest_epochs = 10
+        self.lowest_epochs = 16
         self.model_weights = {}
         self.current_epoch = 0
         self.current_step = 0
-        self.step_diff = 12
+        self.step_diff = 195
         self.possible_steps = len(self.x_train)//(BATCH_SIZE*self.step_diff)
 
 
@@ -216,7 +216,8 @@ class LOCifarClient(MyClient):
             history = self.model.fit(
                 self.local_gen,
                 batch_size=BATCH_SIZE,
-                epochs=5,
+                steps_per_epoch=self.step_diff,
+                epochs=1,
             )
             results = {
                 "loss": history.history["loss"][0],
