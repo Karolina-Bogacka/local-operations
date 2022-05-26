@@ -29,7 +29,7 @@ from tensorflow.keras.layers import BatchNormalization, MaxPool2D, InputLayer
 from tensorflow.keras.layers import Conv2D, Dropout, Flatten, Dense
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from application.config import FEDERATED_PORT
-from application.src.local_clients import  IMAGE_SIZE, BATCH_SIZE
+from application.src.local_clients import IMAGE_SIZE, BATCH_SIZE, load_partition
 from application.src.special_server import SpecialServer
 from application.src.special_strategy import SpecialFedAvg
 
@@ -66,27 +66,26 @@ class SpecialClientImplementation(fl.client.NumPyClient):
         self.round = 0
         self.accuracies = []
         self.times = []
+        (self.x_train, self.y_train), (self.x_test, self.y_test) = load_partition(
+            int(self.index))
         self.model = Sequential()
-        self.model.add(Conv2D(32, (3, 3), input_shape=(32, 32, 3), activation='relu',
-                              padding='same'))
-        self.model.add(Dropout(0.2))
-        self.model.add(Conv2D(32, (3, 3), activation='relu', padding='same'))
-        self.model.add(MaxPooling2D(pool_size=(2, 2)))
-        self.model.add(Conv2D(64, (3, 3), activation='relu', padding='same'))
-        self.model.add(Dropout(0.2))
-        self.model.add(Conv2D(64, (3, 3), activation='relu', padding='same'))
-        self.model.add(MaxPooling2D(pool_size=(2, 2)))
-        self.model.add(Conv2D(128, (3, 3), activation='relu', padding='same'))
-        self.model.add(Dropout(0.2))
-        self.model.add(Conv2D(128, (3, 3), activation='relu', padding='same'))
-        self.model.add(MaxPooling2D(pool_size=(2, 2)))
+        self.model.add(Conv2D(filters=32, kernel_size=(5, 5), activation='relu',
+                              input_shape=self.x_train.shape[1:]))
+        self.model.add(Conv2D(filters=32, kernel_size=(5, 5), activation='relu'))
+        self.model.add(MaxPool2D(pool_size=(2, 2)))
+        self.model.add(Dropout(rate=0.25))
+        self.model.add(Conv2D(filters=64, kernel_size=(3, 3), activation='relu'))
+        self.model.add(Conv2D(filters=64, kernel_size=(3, 3), activation='relu'))
+        self.model.add(MaxPool2D(pool_size=(2, 2)))
+        self.model.add(Dropout(rate=0.25))
         self.model.add(Flatten())
-        self.model.add(Dropout(0.2))
-        self.model.add(Dense(1024, activation='relu', kernel_constraint=maxnorm(3)))
-        self.model.add(Dropout(0.2))
-        self.model.add(Dense(512, activation='relu', kernel_constraint=maxnorm(3)))
-        self.model.add(Dropout(0.2))
-        self.model.add(Dense(10, activation='softmax'))
+        self.model.add(Dense(256, activation='relu'))
+        self.model.add(Dropout(rate=0.5))
+        self.model.add(Dense(43, activation='softmax'))
+
+        # Compilation of the model
+        # self.model.compile(loss='categorical_crossentropy', optimizer='adam',
+        #                   metrics=['accuracy'])
         lrate = 0.01
         decay = lrate / 50
         sgd = SGD(lr=lrate, momentum=0.9, decay=decay, nesterov=False)

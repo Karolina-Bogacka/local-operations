@@ -17,8 +17,8 @@ services:
     #    target: /data
     volumes:
       - type: bind
-        source: ./cifar-10-batches-py
-        target: /cifar-10-batches-py
+        source: ./german-traffic
+        target: /german-traffic
 
 networks:
   default:
