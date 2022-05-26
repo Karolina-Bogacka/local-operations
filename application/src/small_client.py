@@ -85,7 +85,7 @@ def load_partition(idx: int):
     # Retrieving the images and their labels
     for i in range(classes):
         if i in division[idx]:
-            path = os.path.join('german-traffic', 'Train', str(i))
+            path = os.path.join(os.sep, 'german-traffic', 'Train', str(i))
             images = os.listdir(path)
             for a in images:
                 try:

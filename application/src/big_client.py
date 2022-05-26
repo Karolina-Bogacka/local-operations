@@ -16,6 +16,7 @@ from flwr.server.strategy import Strategy
 from keras import backend, Sequential
 from keras.constraints import maxnorm
 from keras.datasets.cifar import load_batch
+from keras.layers import MaxPooling2D, MaxPool2D
 from keras.layers import MaxPooling2D
 from keras.utils import np_utils
 from keras_preprocessing.image import ImageDataGenerator
@@ -25,7 +26,7 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 from application.src.decentralized_fedavg import DecentralizedFedAvg
 from application.src.decentralized_server import DecentralizedServer
-from application.src.small_client import SmallCifarClient
+from application.src.small_client import SmallCifarClient, load_partition
 
 EPOCHS = 5
 
@@ -96,16 +97,7 @@ def load_data():
     return (x_train, y_train), (x_test, y_test)
 
 
-def load_partition(idx: int):
-    """Load 1/10th of the training and test data to simulate a partition."""
-    (x_train, y_train), (x_test, y_test) = load_data()
-    return (
-               x_train[idx * 5000: (idx + 1) * 5000],
-               y_train[idx * 5000: (idx + 1) * 5000],
-           ), (
-               x_test[idx * 1000: (idx + 1) * 1000],
-               y_test[idx * 1000: (idx + 1) * 1000],
-           )
+
 
 
 DEFAULT_SERVER_ADDRESS = f"[::]:8080"
@@ -122,40 +114,30 @@ class BigCifarClient(fl.client.NumPyClient):
         self.times = []
         (self.x_train, self.y_train), (self.x_test, self.y_test) = load_partition(
             int(self.index))
-        self.x_train = self.x_train.astype('float32')
-        self.x_test = self.x_test.astype('float32')
-        self.x_train = self.x_train / 255.0
-        self.x_test = self.x_test / 255.0
-        self.y_train = np_utils.to_categorical(self.y_train)
-        self.y_test = np_utils.to_categorical(self.y_test)
         self.num_classes = self.y_test.shape[1]
         self.model = Sequential()
-        self.model.add(Conv2D(32, (3, 3), input_shape=(32, 32, 3), activation='relu',
-                              padding='same'))
-        self.model.add(Dropout(0.2))
-        self.model.add(Conv2D(32, (3, 3), activation='relu', padding='same'))
-        self.model.add(MaxPooling2D(pool_size=(2, 2)))
-        self.model.add(Conv2D(64, (3, 3), activation='relu', padding='same'))
-        self.model.add(Dropout(0.2))
-        self.model.add(Conv2D(64, (3, 3), activation='relu', padding='same'))
-        self.model.add(MaxPooling2D(pool_size=(2, 2)))
-        self.model.add(Conv2D(128, (3, 3), activation='relu', padding='same'))
-        self.model.add(Dropout(0.2))
-        self.model.add(Conv2D(128, (3, 3), activation='relu', padding='same'))
-        self.model.add(MaxPooling2D(pool_size=(2, 2)))
+        self.model.add(Conv2D(filters=32, kernel_size=(5, 5), activation='relu',
+                              input_shape=self.x_train.shape[1:]))
+        self.model.add(Conv2D(filters=32, kernel_size=(5, 5), activation='relu'))
+        self.model.add(MaxPool2D(pool_size=(2, 2)))
+        self.model.add(Dropout(rate=0.25))
+        self.model.add(Conv2D(filters=64, kernel_size=(3, 3), activation='relu'))
+        self.model.add(Conv2D(filters=64, kernel_size=(3, 3), activation='relu'))
+        self.model.add(MaxPool2D(pool_size=(2, 2)))
+        self.model.add(Dropout(rate=0.25))
         self.model.add(Flatten())
-        self.model.add(Dropout(0.2))
-        self.model.add(Dense(1024, activation='relu', kernel_constraint=maxnorm(3)))
-        self.model.add(Dropout(0.2))
-        self.model.add(Dense(512, activation='relu', kernel_constraint=maxnorm(3)))
-        self.model.add(Dropout(0.2))
-        self.model.add(Dense(10, activation='softmax'))
+        self.model.add(Dense(256, activation='relu'))
+        self.model.add(Dropout(rate=0.5))
+        self.model.add(Dense(43, activation='softmax'))
+
+        # Compilation of the model
+        # self.model.compile(loss='categorical_crossentropy', optimizer='adam',
+        #                   metrics=['accuracy'])
         lrate = 0.01
         decay = lrate / 50
         sgd = SGD(lr=lrate, momentum=0.9, decay=decay, nesterov=False)
         self.model.compile(loss='categorical_crossentropy', optimizer=sgd,
                            metrics=['accuracy'])
-
         self.metric_names = ["accuracy"]
         self.datagen = ImageDataGenerator()
         self.local_gen = self.datagen.flow(self.x_train, self.y_train,

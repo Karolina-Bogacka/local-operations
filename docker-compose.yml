@@ -2,19 +2,19 @@ version: '3'
 services:
   local_operations:
     environment:
-      - USER_INDEX=0
-      - TO_CONNECT=1
+      - USER_INDEX=7
+      - TO_CONNECT=4
       - GROUP_SIZE=4
     restart: always
     build: application
     networks:
       - default
     ports:
-      - '9050:9050'
+      - '9057:9050'
     volumes:
       - type: bind
-        source: ./cifar-10-batches-py
-        target: /cifar-10-batches-py
+        source: /home/rsa-key-20220518/local-operations/german-traffic
+        target: /german-traffic
 
 networks:
   default:
