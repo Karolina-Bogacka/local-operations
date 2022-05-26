@@ -2,9 +2,9 @@ version: '3'
 services:
   local_operations:
     environment:
-      - USER_INDEX=1
-      - TO_CONNECT=8
-      - GROUP_INDEX=1
+      - USER_INDEX=0
+      - TO_CONNECT=1
+      - GROUP_INDEX=0
     restart: always
     build: application
     networks:
@@ -17,7 +17,7 @@ services:
     #    target: /data
     volumes:
       - type: bind
-        source: ./german-traffic
+        source: /Users/karolinabogacka/PycharmProjects/fl-local-operations/german-traffic
         target: /german-traffic
 
 networks:

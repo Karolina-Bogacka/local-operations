@@ -52,6 +52,10 @@ def start_client(id, config):
     client = LOCifarClient()
     start_numpy_client(server_address=f"appv"
                                       f""
+                                      f""
+                                      f""
+                                      f""
+                                      f""
                                       f"{os.environ.get('TO_CONNECT')}-local_operations-1:8081",
                                  client=client)
 
