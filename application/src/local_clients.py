@@ -143,7 +143,7 @@ def load_partition(idx: int):
     print(data.shape, labels.shape)
 
     # Splitting training and testing dataset
-    X_train, X_test, y_train, y_test = train_test_split(data, labels, test_size=0.2,
+    X_train, X_test, y_train, y_test = train_test_split(data, labels, test_size=0.1,
                                                         random_state=42)
 
     # Displaying the shape after the split
@@ -189,7 +189,7 @@ class LOCifarClient(MyClient):
         lrate = 0.01
         decay = lrate / 50
         sgd = SGD(lr=lrate, momentum=0.9, decay=decay, nesterov=False)
-        self.model.compile(loss='categorical_crossentropy', optimizer=sgd,
+        self.model.compile(loss='categorical_crossentropy', optimizer='adam',
                            metrics=['accuracy'])
 
         metrics = ["accuracy", tf.keras.metrics.Precision(name="precision")]
@@ -199,11 +199,11 @@ class LOCifarClient(MyClient):
                                            batch_size=BATCH_SIZE)
         self.losses = losses
         self.assigned_cluster = -1
-        self.lowest_epochs = 16
+        self.lowest_epochs = 50
         self.model_weights = {}
         self.current_epoch = 0
         self.current_step = 0
-        self.step_diff = 195
+        self.step_diff = 26
         self.possible_steps = len(self.x_train)//(BATCH_SIZE*self.step_diff)
 
 
@@ -239,7 +239,6 @@ class LOCifarClient(MyClient):
             history = self.model.fit(
                 self.local_gen,
                 batch_size=BATCH_SIZE,
-                steps_per_epoch=self.step_diff,
                 epochs=1,
             )
             results = {

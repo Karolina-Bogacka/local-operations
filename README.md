@@ -11,7 +11,7 @@ Sample request body for post /job/config/{id}:
  "eval_func": "Huber",
  "num_classes": "10",
  "model_id":"10",
- "num_clusters": "2",
+ "num_clusters": "4",
  "model_version":"10",
  "shape": ["32", "32", "3"],
  "config": [{"config_id": "min_effort",

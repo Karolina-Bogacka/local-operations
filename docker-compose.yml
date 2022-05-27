@@ -8,14 +8,14 @@ services:
     networks:
       - default
     ports:
-      - "9051:9050"
+      - "905${USER_INDEX}:9050"
     #volumes:
     #  - type: bind
     #    source: \\wsl.localhost\Ubuntu20.04LTS\home\new\leaf\data\femnist\data
     #    target: /data
     volumes:
       - type: bind
-        source: /Users/karolinabogacka/PycharmProjects/fl-local-operations/german-traffic
+        source: /home/rsa-key-20220518/local-operations/german-traffic
         target: /german-traffic
 
 networks:
