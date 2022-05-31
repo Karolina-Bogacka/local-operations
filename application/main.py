@@ -6,7 +6,7 @@ import uvicorn
 from flwr.client import start_numpy_client
 from flwr.common.logger import log
 
-from application.src.big_client import BigCifarClient
+from application.src.big_client import BigClient
 from config import PORT, HOST, DB_PORT
 from fastapi import BackgroundTasks
 from fastapi import FastAPI, status, UploadFile, File, Response, HTTPException
@@ -18,7 +18,7 @@ from application.utils import formulate_id
 from pydloc.models import LOTrainingConfiguration, MLModel
 
 app = FastAPI()
-big_client: BigCifarClient = None
+big_client: BigClient = None
 
 # Receive configuration for training job
 @app.post("/job/big/config/{id}")
@@ -27,7 +27,7 @@ BackgroundTasks):
     try:
         global big_client
         log(INFO, f"Connect big client to main server {data.server_address}:8080")
-        big_client = BigCifarClient(data)
+        big_client = BigClient(data)
         start_numpy_client(server_address=f"{data.server_address}:8080",
                            client=big_client)
     except Exception as e:

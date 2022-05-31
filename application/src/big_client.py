@@ -26,7 +26,7 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 from application.src.decentralized_fedavg import DecentralizedFedAvg
 from application.src.decentralized_server import DecentralizedServer
-from application.src.small_client import SmallCifarClient, load_partition
+from application.src.small_client import SmallClient, load_partition
 
 EPOCHS = 5
 
@@ -49,7 +49,7 @@ ds_params = dict(
 )
 
 
-def start_in_thread_client(client: SmallCifarClient):
+def start_in_thread_client(client: SmallClient):
     to_connect_index = int(os.environ.get("TO_CONNECT"))
     group_size = int(os.environ.get("GROUP_SIZE"))
     to_connect = f"appv{to_connect_index}-local_operations-1:8080"
@@ -65,7 +65,7 @@ def start_in_thread_client(client: SmallCifarClient):
 
 def start_big_client(id, config):
     log(INFO, f"Connect big client to main server {config.server_address}:8080")
-    client = BigCifarClient(config)
+    client = BigClient(config)
     start_numpy_client(server_address=f"{config.server_address}:8080",
                        client=client)
 
@@ -103,7 +103,7 @@ def load_data():
 DEFAULT_SERVER_ADDRESS = f"[::]:8080"
 
 
-class BigCifarClient(fl.client.NumPyClient):
+class BigClient(fl.client.NumPyClient):
 
     def __init__(self, config):
         self.index = os.getenv('USER_INDEX')
@@ -194,7 +194,7 @@ class BigCifarClient(fl.client.NumPyClient):
 
     def start_small_client(self, config):
         events = [threading.Event() for _ in range(self.rounds)]
-        self.client = SmallCifarClient(events)
+        self.client = SmallClient(events)
         t1 = threading.Thread(name='small client thread',
                               target=start_in_thread_client,
                               args=(self.client,))

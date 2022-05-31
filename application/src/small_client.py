@@ -116,7 +116,7 @@ def load_partition(idx: int):
     return (X_train, y_train), (X_test, y_test)
 
 
-class SmallCifarClient(fl.client.NumPyClient):
+class SmallClient(fl.client.NumPyClient):
 
     def __init__(self, events):
         self.index = os.getenv('USER_INDEX')
