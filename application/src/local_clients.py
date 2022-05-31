@@ -49,7 +49,7 @@ ds_params = dict(
 
 def start_client(id, config):
     log(INFO, f"appv{os.environ.get('TO_CONNECT')}-local_operations-1:8081")
-    client = LOCifarClient()
+    client = LOLocalClient()
     start_numpy_client(server_address=f"appv"
                                       f""
                                       f""
@@ -104,7 +104,7 @@ def load_partition(idx: int):
     return (X_train, y_train), (X_test, y_test)
 
 
-class LOCifarClient(fl.client.NumPyClient):
+class LOLocalClient(fl.client.NumPyClient):
 
     def __init__(self):
         self.index = os.getenv('USER_INDEX')
@@ -135,7 +135,7 @@ class LOCifarClient(fl.client.NumPyClient):
         lrate = 0.01
         decay = lrate / 50
         sgd = SGD(lr=lrate, momentum=0.9, decay=decay, nesterov=False)
-        self.model.compile(loss='categorical_crossentropy', optimizer=sgd,
+        self.model.compile(loss='categorical_crossentropy', optimizer='adam',
                            metrics=['accuracy'])
 
         self.metric_names = ["accuracy"]
@@ -165,15 +165,11 @@ class LOCifarClient(fl.client.NumPyClient):
         log(INFO,
             f"The loweliest client of {self.index} has began the fit")
 
-        if self.current_step >= self.possible_steps:
-            self.current_step = 0
-            self.local_gen.reset()
-
         log(INFO, f'Iteration of index {self.current_epoch}')
         history = self.model.fit(
-            self.local_gen,
-            batch_size=BATCH_SIZE,
-            steps_per_epoch=self.step_diff,
+            self.x_train,
+            self.y_train,
+            batch_size=len(self.x_train),
             epochs=1,
         )
         results = {
@@ -182,7 +178,7 @@ class LOCifarClient(fl.client.NumPyClient):
         }
         log(INFO, f"{results}")
         log(INFO, f"Loss of model {self.index} equal to {history.history['loss']}")
-        return self.model.get_weights(), BATCH_SIZE, {}
+        return self.model.get_weights(), len(self.x_train), {}
 
 
     def evaluate(self, parameters, config):

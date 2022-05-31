@@ -89,10 +89,10 @@ class SpecialClientImplementation(fl.client.NumPyClient):
         lrate = 0.01
         decay = lrate / 50
         sgd = SGD(lr=lrate, momentum=0.9, decay=decay, nesterov=False)
-        self.model.compile(loss='categorical_crossentropy', optimizer=sgd,
+        self.model.compile(loss='categorical_crossentropy', optimizer='adam',
                            metrics=['accuracy'])
         self.properties = {"GROUP_INDEX": os.environ["GROUP_INDEX"]}
-        self.num_local_rounds = (5000//BATCH_SIZE)*5
+        self.num_local_rounds = 5
         log(INFO, f"Epochs that will be ran locally {self.num_local_rounds}")
         self.start_server(server_address=DEFAULT_SERVER_ADDRESS, config=None,
                       strategy=None)
